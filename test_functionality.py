@@ -4,6 +4,8 @@ Simple test script to verify the MCP Draw.io server functionality
 This tests the core diagram generation without MCP protocol overhead
 """
 
+import tempfile
+from pathlib import Path
 from mcp_drawio_server import Diagram
 
 
@@ -107,7 +109,8 @@ def test_system_architecture():
 
 def save_diagram_to_file(xml_content, filename):
     """Save diagram XML to a file"""
-    filepath = f"/tmp/{filename}"
+    tmp_dir = Path(tempfile.gettempdir())
+    filepath = tmp_dir / filename
     with open(filepath, 'w', encoding='utf-8') as f:
         f.write(xml_content)
     print(f"\n✓ Saved diagram to: {filepath}")

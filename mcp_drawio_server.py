@@ -10,6 +10,7 @@ and the Draw.io plugin to generate diagrams programmatically.
 import asyncio
 import json
 import base64
+from datetime import datetime, timezone
 from typing import Any, Optional
 from mcp.server import Server
 from mcp.server.stdio import stdio_server
@@ -102,7 +103,8 @@ class Diagram:
     
     def to_drawio_xml(self) -> str:
         """Convert diagram to Draw.io XML format"""
-        xml_parts = ['<mxfile host="MCP Draw.io Server" modified="2025-01-01T00:00:00.000Z" version="1.0.0">']
+        timestamp = datetime.now(timezone.utc).isoformat().replace('+00:00', 'Z')
+        xml_parts = [f'<mxfile host="MCP Draw.io Server" modified="{timestamp}" version="1.0.0">']
         xml_parts.append('  <diagram name="{}" id="diagram1">'.format(self.name))
         xml_parts.append('    <mxGraphModel dx="1422" dy="794" grid="1" gridSize="10" guides="1" tooltips="1" connect="1" arrows="1" fold="1" page="1" pageScale="1" pageWidth="827" pageHeight="1169" math="0" shadow="0">')
         xml_parts.append('      <root>')
