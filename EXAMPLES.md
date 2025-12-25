@@ -112,10 +112,66 @@ After the AI generates the diagram:
 
 ## Advanced: Custom Styles
 
-You can specify custom Draw.io styles:
+You can specify custom Draw.io styles to use ANY shape from Draw.io's extensive library:
+
+### Example 5: Using Custom Draw.io Shapes
+
+**Prompt to AI:**
+```
+Create a system diagram using custom Draw.io shapes:
+- User (UML actor shape): style="shape=umlActor;verticalLabelPosition=bottom;verticalAlign=top;html=1;"
+- Web Server (server rack): style="shape=cube;whiteSpace=wrap;html=1;boundedLbl=1;backgroundOutline=1;"
+- Database (datastore): style="shape=datastore;whiteSpace=wrap;html=1;"
+- Cloud Storage (cloud with AWS style): style="sketch=0;outlineConnect=0;fontColor=#232F3E;fillColor=#ED7100;strokeColor=#ffffff;"
+```
+
+### Example 6: Network Diagram with Icons
+
+**Prompt to AI:**
+```
+Create a network diagram with these shapes:
+- Router: style="shape=mxgraph.cisco.routers.router;html=1;"
+- Switch: style="shape=mxgraph.cisco.switches.workgroup_switch;html=1;"
+- Firewall: style="shape=mxgraph.cisco.security.firewall;html=1;"
+- Server: style="shape=mxgraph.cisco.servers.server;html=1;"
+```
+
+### How to Find Style Strings
+
+1. Open Draw.io (https://app.diagrams.net/)
+2. Create or select the shape you want
+3. Right-click → Edit Style (or press Ctrl+E / Cmd+E)
+4. Copy the entire style string
+5. Use it in the `style` parameter when adding shapes
+
+### Common Custom Shapes
+
+Here are some commonly used custom shape styles:
+
+- **Person/Actor**: `shape=umlActor;verticalLabelPosition=bottom;verticalAlign=top;html=1;`
+- **Document**: `shape=document;whiteSpace=wrap;html=1;`
+- **Database (alternate)**: `shape=datastore;whiteSpace=wrap;html=1;`
+- **Process**: `shape=process;whiteSpace=wrap;html=1;backgroundOutline=1;`
+- **Manual Input**: `shape=manualInput;whiteSpace=wrap;html=1;`
+- **Delay**: `shape=delay;whiteSpace=wrap;html=1;`
+- **Display**: `shape=display;whiteSpace=wrap;html=1;`
+- **Note**: `shape=note;whiteSpace=wrap;html=1;backgroundOutline=1;`
+- **Card**: `shape=card;whiteSpace=wrap;html=1;`
+- **Tape**: `shape=tape;whiteSpace=wrap;html=1;`
+
+This gives you access to **hundreds of shapes** including:
+- UML diagrams (classes, actors, use cases)
+- Network diagrams (Cisco, AWS, Azure icons)
+- Flowchart symbols
+- Entity-relationship symbols
+- And many more!
+
+### Styling Tips
+
+You can also customize colors, borders, and fonts:
 
 ```
-Create a shape with custom style:
+Create a shape with custom styling:
 - Label: "Important Process"
 - Style: "rounded=1;whiteSpace=wrap;html=1;fillColor=#dae8fc;strokeColor=#6c8ebf;fontStyle=1"
 ```

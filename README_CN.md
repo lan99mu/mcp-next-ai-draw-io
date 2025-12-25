@@ -162,6 +162,10 @@ MCP 服务器提供以下工具：
 
 ## 支持的形状类型
 
+### 预定义形状（为方便使用）
+
+服务器提供 7 种常用的预定义形状类型：
+
 - **rectangle**：标准矩形框
 - **ellipse**：圆形/椭圆形
 - **diamond**：菱形（常用于决策点）
@@ -169,6 +173,36 @@ MCP 服务器提供以下工具：
 - **hexagon**：六边形（常用于准备步骤）
 - **cylinder**：圆柱形（常用于数据库）
 - **cloud**：云形（常用于云服务）
+
+### 所有 Draw.io 形状（通过自定义样式）
+
+**服务器支持所有 Draw.io 形状**，通过 `style` 参数可以使用任何 Draw.io 图标：
+
+```python
+# 自定义 Draw.io 形状示例：
+
+# 人形图标（UML Actor）
+add_shape(label="用户", style="shape=umlActor;verticalLabelPosition=bottom;verticalAlign=top;html=1;")
+
+# 数据库图标
+add_shape(label="MySQL", style="shape=datastore;whiteSpace=wrap;html=1;")
+
+# 文档图标
+add_shape(label="报告", style="shape=document;whiteSpace=wrap;html=1;")
+
+# 进程/齿轮图标
+add_shape(label="处理中", style="shape=process;whiteSpace=wrap;html=1;backgroundOutline=1;")
+
+# 箭头图标
+add_shape(label="方向", style="shape=singleArrow;whiteSpace=wrap;html=1;")
+
+# 还有数百种其他形状...
+```
+
+获取任何 Draw.io 形状的样式字符串：
+1. 在 Draw.io 中创建该形状
+2. 右键点击 → 编辑样式（Edit Style）
+3. 复制样式字符串并在 `style` 参数中使用
 
 ## 测试
 

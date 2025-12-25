@@ -200,6 +200,10 @@ mcp-next-ai-draw-io/
 
 ## Supported Shape Types
 
+### Predefined Shapes (for convenience)
+
+The server provides 7 commonly-used predefined shape types:
+
 - **rectangle**: Standard rectangular box
 - **ellipse**: Circular/oval shape
 - **diamond**: Diamond shape (often used for decision points)
@@ -207,6 +211,36 @@ mcp-next-ai-draw-io/
 - **hexagon**: Hexagon shape (often used for preparation steps)
 - **cylinder**: Cylinder shape (often used for databases)
 - **cloud**: Cloud shape (often used for cloud services)
+
+### All Draw.io Shapes (via custom styles)
+
+**The server supports ALL Draw.io shapes** through the `style` parameter. You can use any Draw.io shape by providing a custom style string:
+
+```python
+# Examples of using custom Draw.io shapes:
+
+# Actor/Person shape (UML)
+add_shape(label="User", style="shape=umlActor;verticalLabelPosition=bottom;verticalAlign=top;html=1;")
+
+# Database/Datastore shape
+add_shape(label="MySQL", style="shape=datastore;whiteSpace=wrap;html=1;")
+
+# Document shape
+add_shape(label="Report", style="shape=document;whiteSpace=wrap;html=1;")
+
+# Process/Gear shape
+add_shape(label="Processing", style="shape=process;whiteSpace=wrap;html=1;backgroundOutline=1;")
+
+# Arrow shape
+add_shape(label="Direction", style="shape=singleArrow;whiteSpace=wrap;html=1;")
+
+# And hundreds more...
+```
+
+To find the style string for any Draw.io shape:
+1. Create the shape in Draw.io
+2. Right-click → Edit Style
+3. Copy the style string and use it in the `style` parameter
 
 ## Troubleshooting
 
