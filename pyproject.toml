@@ -21,3 +21,6 @@ dev = [
 
 [project.scripts]
 mcp-drawio-server = "mcp_drawio_server:main"
+
+[tool.setuptools]
+py-modules = ["mcp_drawio_server"]
