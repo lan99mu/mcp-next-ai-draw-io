@@ -1,31 +1,71 @@
 # MCP Draw.io 服务器
 
-基于 Python 的 Model Context Protocol (MCP) 服务器，用于生成 Draw.io 图表文件。
+基于 Python 的 Model Context Protocol (MCP) 服务器，提供**简洁、专注的工具**来操作 Draw.io 图表。
 
-## 简介
+[English](./README.md) | 中文
 
-这是一个 Python 实现的 MCP 服务器，可以配合 VS Code 的 Copilot 和 Draw.io 插件来生成图表。服务器提供了创建图表、添加形状、连接形状等功能，输出标准的 Draw.io XML 格式文件。
+## 🎯 设计理念
 
-**注意：** 本服务器仅负责**生成** Draw.io 文件，不包含渲染功能。需要使用 Draw.io 软件查看和编辑生成的图表。
+此 MCP 服务器遵循 **工具封装** 而非应用逻辑的原则：
+
+```
+┌─────────────────┐
+│   Copilot/Agent │  ← 负责策略、风格、推理
+│    (策略层)      │
+└───────▲─────────┘
+        │
+┌───────┴─────────┐
+│  Draw.io MCP    │  ← 提供简洁工具，不做复杂逻辑
+│    (工具层)      │
+└───────▲─────────┘
+        │
+┌───────┴─────────┐
+│   File System   │  ← 存储层
+│    (存储层)      │
+└─────────────────┘
+```
+
+**服务器负责:**
+- ✅ 提供简单的工具来读取/写入/修改 .drawio 文件
+- ✅ 解析和操作图表结构
+- ✅ 验证 XML 格式
+- ✅ 暴露图表元素以供修改
+
+**Copilot/Agent 负责:**
+- ✅ 决定工作流和策略
+- ✅ 处理复杂推理
+- ✅ 管理用户意图和风格
+- ✅ 协调工具使用
 
 ## 特性
 
-- ✍️ **生成 Draw.io XML 文件** - 以编程方式创建 .drawio 图表文件
-- 🔷 **多种形状类型** - 支持矩形、椭圆、菱形等多种形状
-- 🔗 **连接形状** - 在形状之间添加带自定义箭头的连接线
-- 💾 **标准格式** - 输出与 Draw.io 和 diagrams.net 兼容
-- 🤖 **MCP 兼容** - 可与 VS Code Copilot 等 MCP 客户端配合使用
-- 📦 **轻量级** - 简单的 Python 实现，依赖最少
+### 核心能力
+
+- 📁 **加载和保存** - 读取现有 .drawio 文件并保存修改
+- 🔍 **检查** - 列出和检查图表元素（单元格）
+- ✏️ **修改** - 通过 ID 更新、添加或删除特定元素
+- ⚡ **直接 XML** - 访问和操作原始 Draw.io XML
+- 🏗️ **创建** - 从头开始以编程方式构建图表
+- 🔷 **形状类型** - 支持多种预定义形状
+- 🎨 **样式** - 自定义 Draw.io 样式字符串以实现高级控制
+
+### 相比基础版本的改进
+
+相比简单的"生成 XML"服务器，此版本提供：
+
+1. **文件操作** - 加载和修改现有图表，而不仅仅是创建新图表
+2. **元素级控制** - 通过 ID 更新/删除特定元素
+3. **检查工具** - 在修改之前了解图表结构
+4. **灵活的工作流** - Copilot 决定如何使用工具，而不是 MCP 服务器
 
 ## 安装
 
 ### 前置要求
 
 - Python 3.10 或更高版本
-- VS Code 安装了 Draw.io 扩展
-- MCP 兼容的客户端（如 Claude Desktop、VS Code Copilot）
+- MCP 兼容的客户端（VS Code Copilot、Claude Desktop 等）
 
-### 安装步骤
+### 设置
 
 1. 克隆仓库：
 ```bash
@@ -38,16 +78,11 @@ cd mcp-next-ai-draw-io
 pip install -r requirements.txt
 ```
 
-或者以开发模式安装：
-```bash
-pip install -e .
-```
-
 ## 配置
 
 ### VS Code Copilot
 
-在 MCP 配置文件中添加：
+在 MCP 设置配置文件中添加：
 
 **macOS/Linux**: `~/.config/mcp/settings.json`  
 **Windows**: `%APPDATA%\mcp\settings.json`
@@ -65,7 +100,9 @@ pip install -e .
 
 ### Claude Desktop
 
-在 Claude Desktop 配置文件中添加（macOS: `~/Library/Application Support/Claude/claude_desktop_config.json`）：
+在 Claude Desktop 配置文件中添加：
+
+**macOS**: `~/Library/Application Support/Claude/claude_desktop_config.json`
 
 ```json
 {
@@ -78,178 +115,151 @@ pip install -e .
 }
 ```
 
-## 使用方法
+## 使用示例
 
-配置完成后，可以让 AI 助手创建图表。示例提示：
-
-### 创建简单流程图
+### 示例 1：创建新图表
 
 ```
-使用 Draw.io MCP 服务器创建一个用户登录流程图：
-1. 开始
-2. 输入凭据
-3. 验证（使用菱形）
-4. 如果有效，跳转到仪表板
-5. 如果无效，显示错误
+用户："创建一个包含开始、处理和结束节点的简单流程图"
+
+Copilot 将：
+1. 调用 create_diagram
+2. 为每个节点调用 add_shape
+3. 调用 add_connection 链接它们
+4. 调用 save_diagram 保存结果
 ```
 
-### 创建系统架构图
+### 示例 2：修改现有图表
 
 ```
-创建一个系统架构图，包含：
-- 浏览器（客户端）
-- 负载均衡器
-- 三个 API 服务器
-- 数据库
-并适当连接它们。
+用户："加载 diagram.drawio 并将所有矩形改为蓝色"
+
+Copilot 将：
+1. 调用 load_diagram 指定路径
+2. 调用 list_cells 查看所有元素
+3. 为每个矩形调用 update_cell 更新样式
+4. 调用 save_diagram 保存更改
 ```
 
-## 可用工具
+### 示例 3：检查和报告
 
-MCP 服务器提供以下工具：
+```
+用户："显示 architecture.drawio 的结构"
 
-### `create_diagram`
-创建新的 Draw.io 图表。
-- **参数：**
-  - `name`（可选）：图表名称（默认："Untitled"）
+Copilot 将：
+1. 调用 load_diagram
+2. 调用 list_cells 获取所有元素
+3. 向用户呈现摘要
+```
 
-### `add_shape`
-向图表添加形状/节点。
-- **参数：**
-  - `label`（必需）：形状的标签文本
-  - `x`（可选）：X 坐标（默认：0）
-  - `y`（可选）：Y 坐标（默认：0）
-  - `width`（可选）：形状宽度（默认：120）
-  - `height`（可选）：形状高度（默认：60）
-  - `shape_type`（可选）：形状类型 - `rectangle`、`ellipse`、`diamond`、`parallelogram`、`hexagon`、`cylinder`、`cloud`（默认："rectangle"）
-  - `style`（可选）：自定义 Draw.io 样式字符串
+## 工具参考
 
-### `add_connection`
-在两个形状之间添加连接/边。
-- **参数：**
-  - `source_id`（必需）：源形状的 ID
-  - `target_id`（必需）：目标形状的 ID
-  - `label`（可选）：连接的标签文本
-  - `arrow_type`（可选）：箭头类型 - `classic`、`block`、`open`、`oval`、`diamond`、`none`（默认："classic"）
-  - `style`（可选）：自定义 Draw.io 样式字符串
+### 文件操作
 
-### `get_diagram`
-获取当前图表的 Draw.io XML 格式。
+| 工具 | 描述 | 关键参数 |
+|------|------|----------|
+| `load_diagram` | 加载现有 .drawio 文件 | `path` |
+| `save_diagram` | 保存图表到文件 | `path` |
+| `get_diagram_xml` | 获取原始 XML 内容 | 无 |
+| `set_diagram_xml` | 从原始 XML 设置 | `xml` |
 
-### `list_shapes`
-列出图表中的所有形状及其 ID 和标签。
+### 检查工具
 
-## 输出格式
+| 工具 | 描述 | 关键参数 |
+|------|------|----------|
+| `list_cells` | 列出所有图表元素 | 无 |
+| `get_cell` | 获取单元格详细信息 | `cell_id` |
 
-服务器生成 Draw.io XML 格式的图表，可以：
-- 保存为 `.drawio` 文件
-- 在 VS Code 的 Draw.io 扩展中打开
-- 在 Draw.io 桌面应用程序中打开
-- 在 https://app.diagrams.net/ 中打开
+### 修改工具
 
-## 工作原理
+| 工具 | 描述 | 关键参数 |
+|------|------|----------|
+| `update_cell` | 更新单元格属性 | `cell_id`, `value`, `x`, `y`, `style` 等 |
+| `delete_cell` | 删除单元格 | `cell_id` |
+| `add_shape` | 添加新形状 | `label`, `x`, `y`, `shape_type` 等 |
+| `add_connection` | 添加连接 | `source_id`, `target_id`, `label` 等 |
 
-1. MCP 服务器作为后台进程运行
-2. 通过 stdio 与 MCP 客户端（如 VS Code Copilot）通信
-3. 当收到提示时，AI 助手调用服务器的工具来：
-   - 在内存中创建图表结构
-   - 添加形状和连接
-   - 生成与 Draw.io 兼容的 XML
-4. 生成的 XML 可以保存到 `.drawio` 文件
-5. 在 Draw.io（VS Code 扩展、桌面应用或 Web）中打开文件以查看和编辑
+### 创建工具
 
-**重要：** 本服务器仅**生成** Draw.io 文件，不**渲染**图表。需要 Draw.io 软件来可视化输出。
+| 工具 | 描述 | 关键参数 |
+|------|------|----------|
+| `create_diagram` | 创建新图表 | `name`（可选）|
 
 ## 支持的形状类型
 
-### 预定义形状（为方便使用）
+- `rectangle` - 标准矩形框
+- `ellipse` - 圆形/椭圆形
+- `diamond` - 菱形（用于决策）
+- `parallelogram` - 平行四边形（用于输入/输出）
+- `hexagon` - 六边形（用于准备）
+- `cylinder` - 圆柱形（用于数据库）
+- `cloud` - 云形（用于云服务）
 
-服务器提供 7 种常用的预定义形状类型：
-
-- **rectangle**：标准矩形框
-- **ellipse**：圆形/椭圆形
-- **diamond**：菱形（常用于决策点）
-- **parallelogram**：平行四边形（常用于输入/输出）
-- **hexagon**：六边形（常用于准备步骤）
-- **cylinder**：圆柱形（常用于数据库）
-- **cloud**：云形（常用于云服务）
-
-### 所有 Draw.io 形状（通过自定义样式）
-
-**服务器支持所有 Draw.io 形状**，通过 `style` 参数可以使用任何 Draw.io 图标：
-
-```python
-# 自定义 Draw.io 形状示例：
-
-# 人形图标（UML Actor）
-add_shape(label="用户", style="shape=umlActor;verticalLabelPosition=bottom;verticalAlign=top;html=1;")
-
-# 数据库图标
-add_shape(label="MySQL", style="shape=datastore;whiteSpace=wrap;html=1;")
-
-# 文档图标
-add_shape(label="报告", style="shape=document;whiteSpace=wrap;html=1;")
-
-# 进程/齿轮图标
-add_shape(label="处理中", style="shape=process;whiteSpace=wrap;html=1;backgroundOutline=1;")
-
-# 箭头图标
-add_shape(label="方向", style="shape=singleArrow;whiteSpace=wrap;html=1;")
-
-# 还有数百种其他形状...
-```
-
-获取任何 Draw.io 形状的样式字符串：
-1. 在 Draw.io 中创建该形状
-2. 右键点击 → 编辑样式（Edit Style）
-3. 复制样式字符串并在 `style` 参数中使用
+可以通过 `style` 参数使用 Draw.io 样式字符串来使用自定义形状。
 
 ## 测试
 
-运行功能测试：
+运行测试套件：
 
 ```bash
+# 基本功能测试
 python test_functionality.py
-```
 
-这将生成几个示例 .drawio 文件到 `/tmp` 目录。
+# 文件操作测试
+python test_file_operations.py
+```
 
 ## 项目结构
 
 ```
 mcp-next-ai-draw-io/
-├── mcp_drawio_server.py    # MCP 服务器主实现
-├── pyproject.toml           # 项目配置
-├── requirements.txt         # Python 依赖
-├── test_functionality.py    # 功能测试
-├── README.md               # 英文说明文档
-├── README_CN.md            # 中文说明文档（本文件）
-└── EXAMPLES.md             # 使用示例
+├── mcp_drawio_server.py      # 主 MCP 服务器
+├── test_functionality.py      # 基本测试
+├── test_file_operations.py    # 文件操作测试
+├── pyproject.toml             # 项目配置
+├── requirements.txt           # 依赖
+└── README.md                  # 英文文档
 ```
 
-## 故障排除
+## 为什么这样设计？
 
-### 服务器无法连接
-- 验证 Python 3.10+ 已安装：`python --version`
-- 检查 MCP 配置中的路径是否正确
-- 确保已安装依赖：`pip install -r requirements.txt`
+参考 [next-ai-draw-io](https://github.com/DayuanJiang/next-ai-draw-io) 项目后，我们意识到：
 
-### 图表无法正确渲染
-- 确保将输出保存为 `.drawio` 文件
-- 使用 Draw.io 扩展或应用打开
-- 检查输出中的 XML 是否完整
+**❌ 错误方法（应用层逻辑）:**
+- 在 MCP 服务器中构建复杂的工作流
+- 添加浏览器预览、版本历史、HTTP 服务器
+- 对用户工作流做决策
+- 混合工具层和应用层
 
-### 工具调用不起作用
-- 重启 MCP 客户端（VS Code、Claude Desktop 等）
-- 检查服务器日志是否有错误
-- 验证 MCP 配置文件位置是否正确
+**✅ 正确方法（工具层封装）:**
+- 提供简单、专注的工具
+- 让 Copilot/Agent 处理工作流和推理
+- 保持 MCP 服务器作为"纯粹"的工具提供者
+- 专注于干净的文件操作
+- 关注点分离
 
-## 参考
+MCP 服务器是**工具层**，而非**应用层**。
 
-- 参考项目：[next-ai-draw-io](https://github.com/DayuanJiang/next-ai-draw-io)
-- 基于：[Model Context Protocol](https://modelcontextprotocol.io/)
-- 兼容：[Draw.io](https://www.drawio.com/)
+这符合 MCP 的理念：
+
+```
+Copilot/Agent (策略、推理) 
+    ↓
+MCP Server (工具封装)
+    ↓  
+File System (存储)
+```
+
+## 贡献
+
+欢迎贡献！请随时提交 Pull Request。
 
 ## 许可证
 
 MIT License
+
+## 致谢
+
+- 灵感来源：[next-ai-draw-io](https://github.com/DayuanJiang/next-ai-draw-io)
+- 构建于：[Model Context Protocol](https://modelcontextprotocol.io/)
+- 兼容：[Draw.io](https://www.drawio.com/)
