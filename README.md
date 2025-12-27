@@ -1,19 +1,40 @@
 # MCP Draw.io Server
 
-一个基于 Python 的 Model Context Protocol (MCP) 服务器，使 AI 助手（如 GitHub Copilot）能够以编程方式生成 Draw.io 图表文件。该服务器提供创建图表、添加形状和连接的工具，生成的 .drawio 文件可以在 VS Code 的 Draw.io 扩展中打开和查看。
+一个增强版的 Model Context Protocol (MCP) 服务器，使 AI 助手（如 GitHub Copilot、Claude Desktop）能够以编程方式生成和编辑 Draw.io 图表文件，并提供**实时浏览器预览**。
 
-A Python-based Model Context Protocol (MCP) server that enables AI assistants (like GitHub Copilot) to generate Draw.io diagram files programmatically. This server provides tools for creating diagrams, adding shapes, and connecting them. The generated .drawio files can be opened and viewed in VS Code's Draw.io extension.
+A Python-based Model Context Protocol (MCP) server that enables AI assistants (like GitHub Copilot, Claude Desktop) to generate and edit Draw.io diagram files programmatically with **real-time browser preview**.
+
+## 🎯 主要改进 / Key Improvements
+
+相比基础 MCP 服务器，此版本参考 [next-ai-draw-io](https://github.com/DayuanJiang/next-ai-draw-io) 项目，增加了以下重要功能：
+
+Compared to basic MCP servers, this version is inspired by [next-ai-draw-io](https://github.com/DayuanJiang/next-ai-draw-io) and adds:
+
+- 🌐 **实时浏览器预览** / **Real-time Browser Preview** - 内置 HTTP 服务器，在浏览器中实时显示图表更新
+- ✏️ **图表编辑功能** / **Diagram Editing** - 支持基于 ID 的更新、添加、删除操作
+- 📜 **版本历史** / **Version History** - 自动保存图表历史版本
+- 💾 **导出功能** / **Export to File** - 直接导出为 .drawio 文件
+- 🔄 **状态同步** / **State Synchronization** - AI 与浏览器状态自动同步
 
 ## Features
 
 - ✍️ **Generate Draw.io XML files** - Create .drawio diagram files programmatically
+- 🌐 **Real-time browser preview** - See your diagrams update live in the browser
 - 🔷 **Multiple shape types** - Support for rectangle, ellipse, diamond, and more
+- ✏️ **Edit existing diagrams** - Update, add, or delete diagram elements by ID
 - 🔗 **Connect shapes** - Add connections between shapes with customizable arrows
+- 📜 **Version history** - Track and restore previous diagram versions
+- 💾 **Export to files** - Save diagrams as .drawio files
 - 💾 **Standard Draw.io format** - Output compatible with Draw.io and diagrams.net
-- 🤖 **MCP-compatible** - Works with VS Code Copilot and other MCP clients
+- 🤖 **MCP-compatible** - Works with VS Code Copilot, Claude Desktop, and other MCP clients
 - 📦 **Lightweight** - Simple Python implementation with minimal dependencies
 
-**Note:** This server only generates Draw.io XML files. It does not include rendering capabilities. The generated files need to be opened in Draw.io (VS Code extension or web app) for visualization.
+**Enhanced Workflow:** Unlike the basic version that only generates XML, this version provides a complete workflow:
+1. **Start Session** → Opens browser for real-time preview
+2. **Create/Edit Diagrams** → See changes instantly in browser
+3. **Export** → Save to .drawio files
+
+**Note:** This server generates AND displays Draw.io files in real-time. The generated files can also be opened in Draw.io (VS Code extension or web app) for further editing.
 
 ## Installation
 
@@ -116,10 +137,18 @@ Connect them with appropriate relationships.
 
 The MCP server provides the following tools:
 
+### `start_session`
+**NEW!** Start a new diagram session with real-time browser preview.
+- Opens a browser window that shows diagram updates in real-time
+- Should be called first before creating or editing diagrams
+- Starts an embedded HTTP server (default port: 6002)
+
 ### `create_diagram`
 Create a new Draw.io diagram.
 - **Parameters:**
   - `name` (optional): Name of the diagram (default: "Untitled")
+- Resets any existing diagram
+- Use `display_diagram` afterwards to show it in the browser
 
 ### `add_shape`
 Add a shape/node to the diagram.
@@ -141,13 +170,84 @@ Add a connection/edge between two shapes.
   - `arrow_type` (optional): Arrow type - `classic`, `block`, `open`, `oval`, `diamond`, `none` (default: "classic")
   - `style` (optional): Custom Draw.io style string
 
+### `display_diagram`
+**NEW!** Display the current diagram in the browser.
+- Pushes the diagram XML to the browser for real-time preview
+- Use this after adding shapes and connections
+- Automatically saves to version history
+
+### `edit_diagram`
+**NEW!** Edit an existing diagram using ID-based operations.
+- **Parameters:**
+  - `operations` (required): Array of operations
+    - Each operation has:
+      - `operation`: "update", "add", or "delete"
+      - `cell_id`: The ID of the cell to operate on
+      - `new_xml` (for update/add): Complete mxCell XML element
+- **Workflow:**
+  1. Call `get_diagram` to see current cell IDs
+  2. Prepare your operations based on the cell IDs
+  3. Call `edit_diagram` with the operations
+- Automatically syncs with browser and saves to history
+
 ### `get_diagram`
 Get the current diagram as Draw.io XML format.
+- Fetches the latest state from the browser if a session is active
+- Shows cell summary for easier editing
+- Can be saved to a .drawio file
 
 ### `list_shapes`
 List all shapes currently in the diagram with their IDs and labels.
 
+### `export_diagram`
+**NEW!** Export the current diagram to a .drawio file.
+- **Parameters:**
+  - `path` (required): File path to save the diagram (e.g., ./diagram.drawio)
+- Automatically adds .drawio extension if missing
+- Exports the latest version from browser or current diagram
+
+### `get_history`
+**NEW!** Get the version history for the current session.
+- Shows how many versions are saved
+- History is automatically saved when you display or edit diagrams
+
 ## Example Workflow
+
+### Basic Workflow (Real-time Preview) - Recommended!
+
+1. **Start a session with browser preview**
+   ```
+   Ask AI: "Start a new Draw.io session with browser preview"
+   → AI calls start_session tool
+   → Browser opens showing real-time preview
+   ```
+
+2. **Create a diagram**
+   ```
+   Ask AI: "Create a flowchart for user login process"
+   → AI calls create_diagram, add_shape, add_connection
+   → AI calls display_diagram
+   → You see the diagram appear in your browser immediately!
+   ```
+
+3. **Edit the diagram**
+   ```
+   Ask AI: "Change the color of the login button to blue"
+   → AI calls get_diagram to see current cell IDs
+   → AI calls edit_diagram to update the specific cell
+   → Browser updates automatically
+   ```
+
+4. **Export the final result**
+   ```
+   Ask AI: "Export this diagram to login-flow.drawio"
+   → AI calls export_diagram
+   → File saved to disk
+   ```
+
+### Traditional Workflow (Without Browser)
+
+If you don't start a session, the server works like the basic version:
 
 1. **Start a conversation with your AI assistant** in VS Code or Claude Desktop
 2. **Request a diagram**: "Create a flowchart for processing an order"
@@ -162,6 +262,7 @@ List all shapes currently in the diagram with their IDs and labels.
 ## Output Format
 
 The server generates diagrams in Draw.io XML format, which can be:
+- **Displayed in real-time** in your browser (with session)
 - Saved as `.drawio` files
 - Opened in VS Code with the Draw.io extension
 - Opened in the Draw.io desktop application
@@ -179,13 +280,44 @@ pytest
 
 ```
 mcp-next-ai-draw-io/
-├── mcp_drawio_server.py    # Main MCP server implementation
-├── pyproject.toml           # Project configuration
-├── requirements.txt         # Python dependencies
-└── README.md               # This file
+├── mcp_drawio_server.py     # Main MCP server implementation
+├── http_server.py            # Embedded HTTP server for browser preview
+├── diagram_operations.py     # ID-based diagram editing operations
+├── history.py                # Version history management
+├── pyproject.toml            # Project configuration
+├── requirements.txt          # Python dependencies
+├── test_functionality.py     # Functionality tests
+└── README.md                # This file
 ```
 
 ## How It Works
+
+### Real-time Preview Architecture
+
+```
+┌─────────────────┐     MCP      ┌─────────────────┐
+│  AI Assistant   │ ◄──────────► │   MCP Server    │
+│ (Copilot/Claude)│   (stdio)    │  (this package) │
+└─────────────────┘              └────────┬────────┘
+                                          │
+                                 ┌────────▼────────┐
+                                 │ Embedded HTTP   │
+                                 │ Server (:6002)  │
+                                 └────────┬────────┘
+                                          │
+                                 ┌────────▼────────┐
+                                 │  User's Browser │
+                                 │ (draw.io embed) │
+                                 └─────────────────┘
+```
+
+1. **MCP Server** receives tool calls from AI via stdio
+2. **Embedded HTTP Server** serves the draw.io UI and manages diagram state
+3. **Browser** shows real-time diagram updates via polling (1-second intervals)
+4. **State Synchronization** ensures AI and browser stay in sync
+5. **Version History** automatically saves each diagram change
+
+### Traditional Mode (Without Session)
 
 1. The MCP server runs as a background process
 2. It communicates with MCP clients (like VS Code Copilot) via stdio
@@ -196,7 +328,9 @@ mcp-next-ai-draw-io/
 4. The generated XML can be saved to a `.drawio` file
 5. Open the file in Draw.io (VS Code extension, desktop app, or web) to view and edit
 
-**Important:** This server only **generates** Draw.io files. It does **not render** diagrams. You need Draw.io software to visualize the output.
+**Key Difference:** 
+- **With session (recommended)**: Real-time preview in browser, full editing capabilities, version history
+- **Without session**: Only generates XML files, no visual feedback until opened in Draw.io
 
 ## Supported Shape Types
 
