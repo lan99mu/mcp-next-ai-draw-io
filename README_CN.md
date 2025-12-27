@@ -89,12 +89,14 @@ pip install -r requirements.txt
 
 ```json
 {
-  "mcpServers": {
+  "servers": {
     "drawio": {
+      "type": "stdio",
       "command": "python",
       "args": ["/path/to/mcp-next-ai-draw-io/mcp_drawio_server.py"]
     }
-  }
+  },
+  "inputs": []
 }
 ```
 
