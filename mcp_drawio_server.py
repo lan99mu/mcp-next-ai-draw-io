@@ -176,7 +176,8 @@ class Diagram:
 
 # Global diagram storage
 current_diagram: Optional[Diagram] = None
-current_xml: Optional[str] = None  # Store raw XML for loaded diagrams
+# Store raw XML for loaded diagrams (vs. programmatically created diagrams in current_diagram)
+current_xml: Optional[str] = None
 
 
 def get_or_create_diagram() -> Diagram:
@@ -224,6 +225,8 @@ def get_cells_from_xml(xml_content: str) -> list[dict]:
         
         return cells
     except Exception as e:
+        # Log error and return empty list
+        print(f"Warning: Failed to parse XML for cells: {str(e)}")
         return []
 
 
@@ -603,7 +606,15 @@ async def call_tool(name: str, arguments: Any) -> list[TextContent]:
         try:
             xml_content = arguments["xml"]
             # Validate XML by parsing it
-            parse_drawio_xml(xml_content)
+            doc = parse_drawio_xml(xml_content)
+            
+            # Verify it's valid Draw.io XML (has mxGraphModel or mxfile)
+            if not (doc.getElementsByTagName('mxGraphModel') or doc.getElementsByTagName('mxfile')):
+                return [TextContent(
+                    type="text",
+                    text="Error: Invalid Draw.io XML - missing mxGraphModel or mxfile element"
+                )]
+            
             current_xml = xml_content
             current_diagram = None  # Clear in-memory diagram
             
