@@ -3,19 +3,30 @@
 MCP Draw.io Server
 
 A Model Context Protocol (MCP) server that provides tools for creating and 
-manipulating Draw.io diagrams. This server can be used with VS Code Copilot 
-and the Draw.io plugin to generate diagrams programmatically.
+manipulating Draw.io diagrams with real-time browser preview.
+
+This enhanced version includes:
+- Real-time browser preview via embedded HTTP server
+- Diagram editing with ID-based operations
+- Version history tracking
+- Export to .drawio files
 """
 
 import asyncio
 import json
-import base64
+import os
 from datetime import datetime, timezone
-from typing import Any, Optional
+from typing import Any, Optional, List, Dict
+from pathlib import Path
 from mcp.server import Server
 from mcp.server.stdio import stdio_server
 from mcp.types import Tool, TextContent
 from pydantic import BaseModel, Field
+
+# Import new modules
+from http_server import start_http_server, get_state, set_state
+from diagram_operations import apply_diagram_operations, DiagramOperation, extract_cells_info
+from history import add_history, get_history, get_history_count
 
 
 class DiagramElement(BaseModel):
@@ -166,8 +177,9 @@ class Diagram:
         return styles.get(shape_type, styles["rectangle"])
 
 
-# Global diagram storage
+# Global diagram storage and session state
 current_diagram: Optional[Diagram] = None
+current_session: Optional[Dict[str, Any]] = None
 
 
 def get_or_create_diagram() -> Diagram:
@@ -187,8 +199,16 @@ async def list_tools() -> list[Tool]:
     """List available tools"""
     return [
         Tool(
+            name="start_session",
+            description="Start a new diagram session with real-time browser preview. Opens a browser window that will show diagram updates in real-time. This should be called first before creating or editing diagrams.",
+            inputSchema={
+                "type": "object",
+                "properties": {}
+            }
+        ),
+        Tool(
             name="create_diagram",
-            description="Create a new Draw.io diagram. This will reset any existing diagram.",
+            description="Create a new Draw.io diagram. This will reset any existing diagram and display it in the browser (if session is started).",
             inputSchema={
                 "type": "object",
                 "properties": {
@@ -280,8 +300,49 @@ async def list_tools() -> list[Tool]:
             }
         ),
         Tool(
+            name="display_diagram",
+            description="Display the current diagram in the browser. This pushes the diagram XML to the browser for real-time preview. Use this after adding shapes and connections.",
+            inputSchema={
+                "type": "object",
+                "properties": {}
+            }
+        ),
+        Tool(
+            name="edit_diagram",
+            description="Edit an existing diagram using ID-based operations (update/add/delete cells). You should call get_diagram first to see current cell IDs. Operations: 'update' (replace existing cell), 'add' (add new cell), 'delete' (remove cell).",
+            inputSchema={
+                "type": "object",
+                "properties": {
+                    "operations": {
+                        "type": "array",
+                        "description": "Array of operations to apply",
+                        "items": {
+                            "type": "object",
+                            "properties": {
+                                "operation": {
+                                    "type": "string",
+                                    "enum": ["update", "add", "delete"],
+                                    "description": "Operation type"
+                                },
+                                "cell_id": {
+                                    "type": "string",
+                                    "description": "The ID of the cell to operate on"
+                                },
+                                "new_xml": {
+                                    "type": "string",
+                                    "description": "Complete mxCell XML element (required for update/add)"
+                                }
+                            },
+                            "required": ["operation", "cell_id"]
+                        }
+                    }
+                },
+                "required": ["operations"]
+            }
+        ),
+        Tool(
             name="get_diagram",
-            description="Get the current diagram as Draw.io XML format. This can be saved to a .drawio file and opened in Draw.io.",
+            description="Get the current diagram as Draw.io XML format. This fetches the latest state from the browser if a session is active.",
             inputSchema={
                 "type": "object",
                 "properties": {}
@@ -294,6 +355,28 @@ async def list_tools() -> list[Tool]:
                 "type": "object",
                 "properties": {}
             }
+        ),
+        Tool(
+            name="export_diagram",
+            description="Export the current diagram to a .drawio file on disk.",
+            inputSchema={
+                "type": "object",
+                "properties": {
+                    "path": {
+                        "type": "string",
+                        "description": "File path to save the diagram (e.g., ./diagram.drawio)"
+                    }
+                },
+                "required": ["path"]
+            }
+        ),
+        Tool(
+            name="get_history",
+            description="Get the version history for the current session. Shows how many versions are saved.",
+            inputSchema={
+                "type": "object",
+                "properties": {}
+            }
         )
     ]
 
@@ -301,14 +384,43 @@ async def list_tools() -> list[Tool]:
 @app.call_tool()
 async def call_tool(name: str, arguments: Any) -> list[TextContent]:
     """Handle tool calls"""
-    global current_diagram
+    global current_diagram, current_session
     
-    if name == "create_diagram":
+    if name == "start_session":
+        try:
+            # Start embedded HTTP server
+            port = start_http_server(6002)
+            
+            # Create session
+            import random
+            import time
+            session_id = f"mcp-{int(time.time()*1000):x}-{random.randint(0, 0xffffff):06x}"
+            current_session = {
+                'id': session_id,
+                'port': port
+            }
+            
+            # Open browser
+            import webbrowser
+            browser_url = f"http://localhost:{port}?mcp={session_id}"
+            webbrowser.open(browser_url)
+            
+            return [TextContent(
+                type="text",
+                text=f"Session started successfully!\n\nSession ID: {session_id}\nBrowser URL: {browser_url}\n\nThe browser will now show real-time diagram updates. You can now create or edit diagrams."
+            )]
+        except Exception as e:
+            return [TextContent(
+                type="text",
+                text=f"Error starting session: {str(e)}"
+            )]
+    
+    elif name == "create_diagram":
         diagram_name = arguments.get("name", "Untitled")
         current_diagram = Diagram(name=diagram_name)
         return [TextContent(
             type="text",
-            text=f"Created new diagram: {diagram_name}"
+            text=f"Created new diagram: {diagram_name}\n\nYou can now add shapes and connections. Use display_diagram to show it in the browser."
         )]
     
     elif name == "add_shape":
@@ -347,12 +459,117 @@ async def call_tool(name: str, arguments: Any) -> list[TextContent]:
                 text=f"Error: {str(e)}"
             )]
     
+    elif name == "display_diagram":
+        diagram = get_or_create_diagram()
+        xml_content = diagram.to_drawio_xml()
+        
+        # If we have a session, push to browser
+        if current_session:
+            session_id = current_session['id']
+            
+            # Save current state to history before updating
+            browser_state = get_state(session_id)
+            if browser_state and browser_state.get('xml'):
+                add_history(session_id, browser_state['xml'], browser_state.get('svg', ''))
+            
+            # Update browser state
+            set_state(session_id, xml_content)
+            
+            # Add new state to history
+            add_history(session_id, xml_content)
+            
+            return [TextContent(
+                type="text",
+                text=f"Diagram displayed in browser!\n\nThe diagram is now visible in your browser window.\n\nXML length: {len(xml_content)} characters\nShapes: {len(diagram.shapes)}\nConnections: {len(diagram.connections)}"
+            )]
+        else:
+            return [TextContent(
+                type="text",
+                text=f"Diagram XML generated:\n\n{xml_content}\n\nNote: No active browser session. Call start_session first for real-time preview, or save this XML to a .drawio file."
+            )]
+    
+    elif name == "edit_diagram":
+        if not current_session:
+            return [TextContent(
+                type="text",
+                text="Error: No active session. Please call start_session first."
+            )]
+        
+        session_id = current_session['id']
+        
+        # Get current state from browser
+        browser_state = get_state(session_id)
+        if not browser_state or not browser_state.get('xml'):
+            return [TextContent(
+                type="text",
+                text="Error: No diagram to edit. Please create a diagram first with display_diagram."
+            )]
+        
+        current_xml = browser_state['xml']
+        
+        # Save state before editing
+        add_history(session_id, current_xml, browser_state.get('svg', ''))
+        
+        # Parse operations
+        ops_data = arguments.get("operations", [])
+        operations = [
+            DiagramOperation(
+                operation=op.get("operation"),
+                cell_id=op.get("cell_id"),
+                new_xml=op.get("new_xml")
+            )
+            for op in ops_data
+        ]
+        
+        # Apply operations
+        result = apply_diagram_operations(current_xml, operations)
+        errors = result.get('errors', [])
+        new_xml = result.get('result', current_xml)
+        
+        # Update state
+        set_state(session_id, new_xml)
+        add_history(session_id, new_xml)
+        
+        # Build response
+        success_msg = f"Diagram edited successfully!\n\nApplied {len(operations)} operation(s)."
+        error_msg = ""
+        if errors:
+            error_list = "\n".join([f"- {e.type} {e.cell_id}: {e.message}" for e in errors])
+            error_msg = f"\n\nWarnings:\n{error_list}"
+        
+        return [TextContent(
+            type="text",
+            text=success_msg + error_msg
+        )]
+    
     elif name == "get_diagram":
+        # Try to get from browser first if we have a session
+        if current_session:
+            session_id = current_session['id']
+            browser_state = get_state(session_id)
+            if browser_state and browser_state.get('xml'):
+                xml_content = browser_state['xml']
+                
+                # Extract cell info for easier editing
+                cells = extract_cells_info(xml_content)
+                cells_summary = "\n".join([
+                    f"  - ID: {c['id']}, Label: {c.get('value', 'N/A')}, Type: {'edge' if c.get('edge') else 'vertex'}"
+                    for c in cells[:20]  # Show first 20
+                ])
+                if len(cells) > 20:
+                    cells_summary += f"\n  ... and {len(cells) - 20} more cells"
+                
+                return [TextContent(
+                    type="text",
+                    text=f"Current diagram XML:\n\n{xml_content}\n\n--- Cell Summary ({len(cells)} cells) ---\n{cells_summary}"
+                )]
+        
+        # Fallback to current diagram
         diagram = get_or_create_diagram()
         xml_content = diagram.to_drawio_xml()
         return [TextContent(
             type="text",
-            text=f"Draw.io XML:\n\n{xml_content}\n\nYou can save this to a .drawio file and open it in Draw.io or VS Code with the Draw.io extension."
+            text=f"Current diagram XML:\n\n{xml_content}\n\nYou can save this to a .drawio file and open it in Draw.io or VS Code with the Draw.io extension."
         )]
     
     elif name == "list_shapes":
@@ -372,6 +589,61 @@ async def call_tool(name: str, arguments: Any) -> list[TextContent]:
         return [TextContent(
             type="text",
             text="Shapes in diagram:\n" + "\n".join(shapes_list)
+        )]
+    
+    elif name == "export_diagram":
+        export_path = arguments.get("path", "diagram.drawio")
+        
+        # Get XML content
+        xml_content = None
+        if current_session:
+            session_id = current_session['id']
+            browser_state = get_state(session_id)
+            if browser_state and browser_state.get('xml'):
+                xml_content = browser_state['xml']
+        
+        if not xml_content:
+            diagram = get_or_create_diagram()
+            xml_content = diagram.to_drawio_xml()
+        
+        # Ensure .drawio extension
+        if not export_path.endswith('.drawio'):
+            export_path += '.drawio'
+        
+        # Write to file
+        try:
+            file_path = Path(export_path).resolve()
+            file_path.write_text(xml_content, encoding='utf-8')
+            
+            return [TextContent(
+                type="text",
+                text=f"Diagram exported successfully!\n\nFile: {file_path}\nSize: {len(xml_content)} characters"
+            )]
+        except Exception as e:
+            return [TextContent(
+                type="text",
+                text=f"Error exporting diagram: {str(e)}"
+            )]
+    
+    elif name == "get_history":
+        if not current_session:
+            return [TextContent(
+                type="text",
+                text="No active session. History is only available for browser sessions."
+            )]
+        
+        session_id = current_session['id']
+        count = get_history_count(session_id)
+        
+        if count == 0:
+            return [TextContent(
+                type="text",
+                text="No history available yet. History is saved each time you display or edit the diagram."
+            )]
+        
+        return [TextContent(
+            type="text",
+            text=f"History: {count} version(s) saved for this session.\n\nYou can restore previous versions by manually copying earlier XML from get_diagram calls."
         )]
     
     else:
