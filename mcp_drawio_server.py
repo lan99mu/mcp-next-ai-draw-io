@@ -47,6 +47,10 @@ class Connection(DiagramElement):
     source_id: str
     target_id: str
     arrow_type: str = "classic"
+    label_position: Optional[str] = None  # "left", "right", "center"
+    label_offset_x: Optional[float] = None  # X offset for label position
+    label_offset_y: Optional[float] = None  # Y offset for label position
+    label_background_color: Optional[str] = None  # Background color for label
 
 
 class Diagram:
@@ -90,7 +94,11 @@ class Diagram:
         target_id: str,
         label: str = "",
         arrow_type: str = "classic",
-        style: str = ""
+        style: str = "",
+        label_position: Optional[str] = None,
+        label_offset_x: Optional[float] = None,
+        label_offset_y: Optional[float] = None,
+        label_background_color: Optional[str] = None
     ) -> str:
         """Add a connection between two shapes"""
         if source_id not in self.shapes or target_id not in self.shapes:
@@ -105,7 +113,11 @@ class Diagram:
             source_id=source_id,
             target_id=target_id,
             arrow_type=arrow_type,
-            style=style
+            style=style,
+            label_position=label_position,
+            label_offset_x=label_offset_x,
+            label_offset_y=label_offset_y,
+            label_background_color=label_background_color
         )
         return conn_id
     
@@ -134,12 +146,35 @@ class Diagram:
         
         # Add connections
         for conn in self.connections.values():
-            style = conn.style or f"edgeStyle=orthogonalEdgeStyle;rounded=0;orthogonalLoop=1;jettySize=auto;html=1;endArrow={conn.arrow_type};"
+            # Build style string with label positioning
+            if conn.style:
+                style = conn.style
+            else:
+                style = f"edgeStyle=orthogonalEdgeStyle;rounded=0;orthogonalLoop=1;jettySize=auto;html=1;endArrow={conn.arrow_type};"
+            
+            # Add label position to style if specified
+            if conn.label_position:
+                style += f"labelPosition={conn.label_position};"
+            
+            # Add label background color to style if specified
+            if conn.label_background_color:
+                style += f"labelBackgroundColor={conn.label_background_color};"
+            
             xml_parts.append(
                 f'        <mxCell id="{conn.id}" value="{self._escape_xml(conn.label)}" '
                 f'style="{style}" edge="1" parent="1" source="{conn.source_id}" target="{conn.target_id}">'
             )
-            xml_parts.append('          <mxGeometry relative="1" as="geometry"/>')
+            
+            # Add geometry with label offset if specified
+            if conn.label_offset_x is not None or conn.label_offset_y is not None:
+                offset_x = conn.label_offset_x if conn.label_offset_x is not None else 0
+                offset_y = conn.label_offset_y if conn.label_offset_y is not None else 0
+                xml_parts.append(f'          <mxGeometry relative="1" as="geometry">')
+                xml_parts.append(f'            <mxPoint x="{offset_x}" y="{offset_y}" as="offset"/>')
+                xml_parts.append('          </mxGeometry>')
+            else:
+                xml_parts.append('          <mxGeometry relative="1" as="geometry"/>')
+            
             xml_parts.append('        </mxCell>')
         
         xml_parts.append('      </root>')
@@ -473,7 +508,7 @@ async def list_tools() -> list[Tool]:
         ),
         Tool(
             name="add_connection",
-            description="Add a connection/edge between two shapes in the diagram. Returns the ID of the created connection.",
+            description="Add a connection/edge between two shapes in the diagram. Supports label positioning. Returns the ID of the created connection.",
             inputSchema={
                 "type": "object",
                 "properties": {
@@ -500,6 +535,23 @@ async def list_tools() -> list[Tool]:
                         "type": "string",
                         "description": "Custom Draw.io style string (optional)",
                         "default": ""
+                    },
+                    "label_position": {
+                        "type": "string",
+                        "description": "Position of the label relative to the edge: 'left', 'right', or 'center' (optional)",
+                        "enum": ["left", "right", "center"]
+                    },
+                    "label_offset_x": {
+                        "type": "number",
+                        "description": "Horizontal offset for the label position in pixels (optional)"
+                    },
+                    "label_offset_y": {
+                        "type": "number",
+                        "description": "Vertical offset for the label position in pixels (optional)"
+                    },
+                    "label_background_color": {
+                        "type": "string",
+                        "description": "Background color for the label, e.g., '#ffffff' or 'none' (optional)"
                     }
                 },
                 "required": ["source_id", "target_id"]
@@ -779,7 +831,11 @@ async def call_tool(name: str, arguments: Any) -> list[TextContent]:
                 target_id=arguments["target_id"],
                 label=arguments.get("label", ""),
                 arrow_type=arguments.get("arrow_type", "classic"),
-                style=arguments.get("style", "")
+                style=arguments.get("style", ""),
+                label_position=arguments.get("label_position"),
+                label_offset_x=arguments.get("label_offset_x"),
+                label_offset_y=arguments.get("label_offset_y"),
+                label_background_color=arguments.get("label_background_color")
             )
             # Update current_xml if we're working with XML
             if current_xml:

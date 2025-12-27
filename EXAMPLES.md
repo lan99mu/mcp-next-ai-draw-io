@@ -177,3 +177,49 @@ Create a shape with custom styling:
 ```
 
 This creates a blue rounded rectangle with bold text.
+
+## Connection Label Positioning
+
+### Example 7: Customizing Connection Label Positions
+
+**Prompt to AI:**
+```
+Create a workflow diagram with customized connection labels:
+- Create three nodes: "Start", "Process", and "End"
+- Connect Start to Process with a center-aligned label "Initialize"
+- Connect Process to End with a label "Complete" offset 20 pixels right and 10 pixels down
+- Add a self-loop from Process to Process with a label that has a yellow background
+```
+
+**Expected Result:**
+A diagram with three nodes and connections that have customized label positions.
+
+### Connection Label Features
+
+The MCP server now supports fine-grained control over connection label positioning:
+
+1. **Label Position** - Align label relative to the edge:
+   ```
+   Add connection with label_position="left" (or "right", "center")
+   ```
+
+2. **Label Offset** - Precise pixel-level positioning:
+   ```
+   Add connection with label_offset_x=20, label_offset_y=-10
+   ```
+
+3. **Label Background Color** - Highlight labels with background:
+   ```
+   Add connection with label_background_color="#ffeb3b"
+   ```
+
+4. **Combine Features** - Use all features together:
+   ```
+   Add connection with:
+   - label_position="right"
+   - label_offset_x=-5
+   - label_offset_y=10
+   - label_background_color="#e3f2fd"
+   ```
+
+This gives you complete control over how connection labels appear in your diagrams!

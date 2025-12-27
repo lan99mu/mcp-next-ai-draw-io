@@ -183,7 +183,36 @@ Copilot will:
 | `update_cell` | Update cell properties | `cell_id`, `value`, `x`, `y`, `style`, etc. |
 | `delete_cell` | Delete a cell | `cell_id` |
 | `add_shape` | Add new shape | `label`, `x`, `y`, `shape_type`, etc. |
-| `add_connection` | Add connection | `source_id`, `target_id`, `label`, etc. |
+| `add_connection` | Add connection (supports label positioning) | `source_id`, `target_id`, `label`, `label_position`, `label_offset_x`, `label_offset_y`, `label_background_color`, etc. |
+
+### Connection Label Positioning / 连接标签位置
+
+The `add_connection` tool now supports adjusting the position of connection line text (labels):
+
+- **`label_position`** - Position of label relative to the edge: `"left"`, `"right"`, or `"center"`
+- **`label_offset_x`** - Horizontal offset for the label position in pixels
+- **`label_offset_y`** - Vertical offset for the label position in pixels
+- **`label_background_color`** - Background color for the label (e.g., `"#ffffff"` or `"none"`)
+
+**Examples:**
+```python
+# Center-aligned label
+add_connection(source_id, target_id, label="Centered", label_position="center")
+
+# Custom offset
+add_connection(source_id, target_id, label="Offset Label", label_offset_x=20, label_offset_y=-10)
+
+# With background color
+add_connection(source_id, target_id, label="Colored BG", label_background_color="#ffeb3b")
+
+# Combine all features
+add_connection(source_id, target_id, 
+    label="Fully Custom", 
+    label_position="right",
+    label_offset_x=-10, 
+    label_offset_y=5,
+    label_background_color="#e3f2fd")
+```
 
 ### Creation Tools / 创建工具
 

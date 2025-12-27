@@ -179,7 +179,36 @@ Copilot 将：
 | `update_cell` | 更新单元格属性 | `cell_id`, `value`, `x`, `y`, `style` 等 |
 | `delete_cell` | 删除单元格 | `cell_id` |
 | `add_shape` | 添加新形状 | `label`, `x`, `y`, `shape_type` 等 |
-| `add_connection` | 添加连接 | `source_id`, `target_id`, `label` 等 |
+| `add_connection` | 添加连接（支持标签位置调整）| `source_id`, `target_id`, `label`, `label_position`, `label_offset_x`, `label_offset_y`, `label_background_color` 等 |
+
+### 连接标签位置
+
+`add_connection` 工具现在支持调整连接线文字（标签）的位置：
+
+- **`label_position`** - 标签相对于连接线的位置：`"left"`（左侧）、`"right"`（右侧）或 `"center"`（居中）
+- **`label_offset_x`** - 标签的水平偏移量（像素）
+- **`label_offset_y`** - 标签的垂直偏移量（像素）
+- **`label_background_color`** - 标签的背景颜色（如 `"#ffffff"` 或 `"none"`）
+
+**示例：**
+```python
+# 标签居中
+add_connection(source_id, target_id, label="居中标签", label_position="center")
+
+# 自定义偏移
+add_connection(source_id, target_id, label="偏移标签", label_offset_x=20, label_offset_y=-10)
+
+# 带背景色
+add_connection(source_id, target_id, label="彩色背景", label_background_color="#ffeb3b")
+
+# 组合使用所有功能
+add_connection(source_id, target_id, 
+    label="完整自定义", 
+    label_position="right",
+    label_offset_x=-10, 
+    label_offset_y=5,
+    label_background_color="#e3f2fd")
+```
 
 ### 创建工具
 
