@@ -3,30 +3,27 @@
 MCP Draw.io Server
 
 A Model Context Protocol (MCP) server that provides tools for creating and 
-manipulating Draw.io diagrams with real-time browser preview.
+manipulating Draw.io diagrams. This server focuses on providing clean, 
+simple tools that Copilot/Agents can use to work with Draw.io files.
 
-This enhanced version includes:
-- Real-time browser preview via embedded HTTP server
-- Diagram editing with ID-based operations
-- Version history tracking
-- Export to .drawio files
+Core capabilities:
+- Create diagrams programmatically
+- Read and parse existing .drawio files
+- Modify diagram elements by ID
+- Save diagrams to files
 """
 
 import asyncio
 import json
-import os
+import base64
 from datetime import datetime, timezone
-from typing import Any, Optional, List, Dict
+from typing import Any, Optional
 from pathlib import Path
+from xml.dom import minidom
 from mcp.server import Server
 from mcp.server.stdio import stdio_server
 from mcp.types import Tool, TextContent
 from pydantic import BaseModel, Field
-
-# Import new modules
-from http_server import start_http_server, get_state, set_state
-from diagram_operations import apply_diagram_operations, DiagramOperation, extract_cells_info
-from history import add_history, get_history, get_history_count
 
 
 class DiagramElement(BaseModel):
@@ -177,9 +174,9 @@ class Diagram:
         return styles.get(shape_type, styles["rectangle"])
 
 
-# Global diagram storage and session state
+# Global diagram storage
 current_diagram: Optional[Diagram] = None
-current_session: Optional[Dict[str, Any]] = None
+current_xml: Optional[str] = None  # Store raw XML for loaded diagrams
 
 
 def get_or_create_diagram() -> Diagram:
@@ -188,6 +185,96 @@ def get_or_create_diagram() -> Diagram:
     if current_diagram is None:
         current_diagram = Diagram()
     return current_diagram
+
+
+def parse_drawio_xml(xml_content: str) -> minidom.Document:
+    """Parse Draw.io XML and return DOM document"""
+    return minidom.parseString(xml_content)
+
+
+def get_cells_from_xml(xml_content: str) -> list[dict]:
+    """Extract all cells from Draw.io XML"""
+    try:
+        doc = parse_drawio_xml(xml_content)
+        cells = []
+        
+        for cell in doc.getElementsByTagName('mxCell'):
+            cell_id = cell.getAttribute('id')
+            if cell_id and cell_id not in ['0', '1']:  # Skip default root cells
+                cell_info = {
+                    'id': cell_id,
+                    'value': cell.getAttribute('value'),
+                    'style': cell.getAttribute('style'),
+                    'vertex': cell.getAttribute('vertex') == '1',
+                    'edge': cell.getAttribute('edge') == '1',
+                    'source': cell.getAttribute('source'),
+                    'target': cell.getAttribute('target'),
+                }
+                
+                # Get geometry if available
+                geom = cell.getElementsByTagName('mxGeometry')
+                if geom:
+                    g = geom[0]
+                    cell_info['x'] = g.getAttribute('x')
+                    cell_info['y'] = g.getAttribute('y')
+                    cell_info['width'] = g.getAttribute('width')
+                    cell_info['height'] = g.getAttribute('height')
+                
+                cells.append(cell_info)
+        
+        return cells
+    except Exception as e:
+        return []
+
+
+def update_cell_in_xml(xml_content: str, cell_id: str, **updates) -> str:
+    """Update a cell in the XML by ID"""
+    try:
+        doc = parse_drawio_xml(xml_content)
+        
+        # Find the cell
+        for cell in doc.getElementsByTagName('mxCell'):
+            if cell.getAttribute('id') == cell_id:
+                # Update attributes
+                if 'value' in updates and updates['value'] is not None:
+                    cell.setAttribute('value', str(updates['value']))
+                if 'style' in updates and updates['style'] is not None:
+                    cell.setAttribute('style', str(updates['style']))
+                
+                # Update geometry
+                geom_elements = cell.getElementsByTagName('mxGeometry')
+                if geom_elements and any(k in updates for k in ['x', 'y', 'width', 'height']):
+                    geom = geom_elements[0]
+                    if 'x' in updates and updates['x'] is not None:
+                        geom.setAttribute('x', str(updates['x']))
+                    if 'y' in updates and updates['y'] is not None:
+                        geom.setAttribute('y', str(updates['y']))
+                    if 'width' in updates and updates['width'] is not None:
+                        geom.setAttribute('width', str(updates['width']))
+                    if 'height' in updates and updates['height'] is not None:
+                        geom.setAttribute('height', str(updates['height']))
+                
+                break
+        
+        return doc.toxml()
+    except Exception as e:
+        raise ValueError(f"Failed to update cell: {str(e)}")
+
+
+def delete_cell_in_xml(xml_content: str, cell_id: str) -> str:
+    """Delete a cell from the XML by ID"""
+    try:
+        doc = parse_drawio_xml(xml_content)
+        
+        # Find and remove the cell
+        for cell in doc.getElementsByTagName('mxCell'):
+            if cell.getAttribute('id') == cell_id:
+                cell.parentNode.removeChild(cell)
+                break
+        
+        return doc.toxml()
+    except Exception as e:
+        raise ValueError(f"Failed to delete cell: {str(e)}")
 
 
 # Initialize MCP server
@@ -199,16 +286,8 @@ async def list_tools() -> list[Tool]:
     """List available tools"""
     return [
         Tool(
-            name="start_session",
-            description="Start a new diagram session with real-time browser preview. Opens a browser window that will show diagram updates in real-time. This should be called first before creating or editing diagrams.",
-            inputSchema={
-                "type": "object",
-                "properties": {}
-            }
-        ),
-        Tool(
             name="create_diagram",
-            description="Create a new Draw.io diagram. This will reset any existing diagram and display it in the browser (if session is started).",
+            description="Create a new Draw.io diagram from scratch. This initializes a new diagram in memory.",
             inputSchema={
                 "type": "object",
                 "properties": {
@@ -221,8 +300,132 @@ async def list_tools() -> list[Tool]:
             }
         ),
         Tool(
+            name="load_diagram",
+            description="Load an existing .drawio file from disk. This allows you to read and modify existing diagrams.",
+            inputSchema={
+                "type": "object",
+                "properties": {
+                    "path": {
+                        "type": "string",
+                        "description": "Path to the .drawio file to load"
+                    }
+                },
+                "required": ["path"]
+            }
+        ),
+        Tool(
+            name="save_diagram",
+            description="Save the current diagram to a .drawio file on disk.",
+            inputSchema={
+                "type": "object",
+                "properties": {
+                    "path": {
+                        "type": "string",
+                        "description": "Path where the .drawio file should be saved"
+                    }
+                },
+                "required": ["path"]
+            }
+        ),
+        Tool(
+            name="get_diagram_xml",
+            description="Get the current diagram as Draw.io XML. This returns the complete XML structure that can be inspected or modified.",
+            inputSchema={
+                "type": "object",
+                "properties": {}
+            }
+        ),
+        Tool(
+            name="set_diagram_xml",
+            description="Set the diagram from raw Draw.io XML. This allows direct XML manipulation.",
+            inputSchema={
+                "type": "object",
+                "properties": {
+                    "xml": {
+                        "type": "string",
+                        "description": "Complete Draw.io XML content"
+                    }
+                },
+                "required": ["xml"]
+            }
+        ),
+        Tool(
+            name="list_cells",
+            description="List all cells (shapes and connections) in the diagram with their IDs, labels, and types. Useful for understanding the diagram structure before making modifications.",
+            inputSchema={
+                "type": "object",
+                "properties": {}
+            }
+        ),
+        Tool(
+            name="get_cell",
+            description="Get detailed information about a specific cell by its ID.",
+            inputSchema={
+                "type": "object",
+                "properties": {
+                    "cell_id": {
+                        "type": "string",
+                        "description": "The ID of the cell to retrieve"
+                    }
+                },
+                "required": ["cell_id"]
+            }
+        ),
+        Tool(
+            name="update_cell",
+            description="Update a specific cell by ID. You can modify its label, position, size, style, etc.",
+            inputSchema={
+                "type": "object",
+                "properties": {
+                    "cell_id": {
+                        "type": "string",
+                        "description": "The ID of the cell to update"
+                    },
+                    "value": {
+                        "type": "string",
+                        "description": "New label/value for the cell"
+                    },
+                    "x": {
+                        "type": "number",
+                        "description": "New X coordinate"
+                    },
+                    "y": {
+                        "type": "number",
+                        "description": "New Y coordinate"
+                    },
+                    "width": {
+                        "type": "number",
+                        "description": "New width"
+                    },
+                    "height": {
+                        "type": "number",
+                        "description": "New height"
+                    },
+                    "style": {
+                        "type": "string",
+                        "description": "New style string"
+                    }
+                },
+                "required": ["cell_id"]
+            }
+        ),
+        Tool(
+            name="delete_cell",
+            description="Delete a specific cell by ID from the diagram.",
+            inputSchema={
+                "type": "object",
+                "properties": {
+                    "cell_id": {
+                        "type": "string",
+                        "description": "The ID of the cell to delete"
+                    }
+                },
+                "required": ["cell_id"]
+            }
+        ),
+        Tool(
             name="add_shape",
-            description="Add a shape/node to the diagram. Supported shape types: rectangle, ellipse, diamond, parallelogram, hexagon, cylinder, cloud.",
+            description="Add a new shape/node to the diagram. Returns the ID of the created shape.",
             inputSchema={
                 "type": "object",
                 "properties": {
@@ -267,7 +470,7 @@ async def list_tools() -> list[Tool]:
         ),
         Tool(
             name="add_connection",
-            description="Add a connection/edge between two shapes in the diagram.",
+            description="Add a connection/edge between two shapes in the diagram. Returns the ID of the created connection.",
             inputSchema={
                 "type": "object",
                 "properties": {
@@ -300,79 +503,8 @@ async def list_tools() -> list[Tool]:
             }
         ),
         Tool(
-            name="display_diagram",
-            description="Display the current diagram in the browser. This pushes the diagram XML to the browser for real-time preview. Use this after adding shapes and connections.",
-            inputSchema={
-                "type": "object",
-                "properties": {}
-            }
-        ),
-        Tool(
-            name="edit_diagram",
-            description="Edit an existing diagram using ID-based operations (update/add/delete cells). You should call get_diagram first to see current cell IDs. Operations: 'update' (replace existing cell), 'add' (add new cell), 'delete' (remove cell).",
-            inputSchema={
-                "type": "object",
-                "properties": {
-                    "operations": {
-                        "type": "array",
-                        "description": "Array of operations to apply",
-                        "items": {
-                            "type": "object",
-                            "properties": {
-                                "operation": {
-                                    "type": "string",
-                                    "enum": ["update", "add", "delete"],
-                                    "description": "Operation type"
-                                },
-                                "cell_id": {
-                                    "type": "string",
-                                    "description": "The ID of the cell to operate on"
-                                },
-                                "new_xml": {
-                                    "type": "string",
-                                    "description": "Complete mxCell XML element (required for update/add)"
-                                }
-                            },
-                            "required": ["operation", "cell_id"]
-                        }
-                    }
-                },
-                "required": ["operations"]
-            }
-        ),
-        Tool(
-            name="get_diagram",
-            description="Get the current diagram as Draw.io XML format. This fetches the latest state from the browser if a session is active.",
-            inputSchema={
-                "type": "object",
-                "properties": {}
-            }
-        ),
-        Tool(
             name="list_shapes",
-            description="List all shapes currently in the diagram with their IDs and labels.",
-            inputSchema={
-                "type": "object",
-                "properties": {}
-            }
-        ),
-        Tool(
-            name="export_diagram",
-            description="Export the current diagram to a .drawio file on disk.",
-            inputSchema={
-                "type": "object",
-                "properties": {
-                    "path": {
-                        "type": "string",
-                        "description": "File path to save the diagram (e.g., ./diagram.drawio)"
-                    }
-                },
-                "required": ["path"]
-            }
-        ),
-        Tool(
-            name="get_history",
-            description="Get the version history for the current session. Shows how many versions are saved.",
+            description="List all shapes in the diagram (deprecated: use list_cells instead for more complete information).",
             inputSchema={
                 "type": "object",
                 "properties": {}
@@ -384,44 +516,229 @@ async def list_tools() -> list[Tool]:
 @app.call_tool()
 async def call_tool(name: str, arguments: Any) -> list[TextContent]:
     """Handle tool calls"""
-    global current_diagram, current_session
+    global current_diagram, current_xml
     
-    if name == "start_session":
+    if name == "create_diagram":
+        diagram_name = arguments.get("name", "Untitled")
+        current_diagram = Diagram(name=diagram_name)
+        current_xml = None  # Reset XML when creating new diagram
+        return [TextContent(
+            type="text",
+            text=f"Created new diagram: {diagram_name}\n\nYou can now add shapes and connections using add_shape and add_connection tools."
+        )]
+    
+    elif name == "load_diagram":
         try:
-            # Start embedded HTTP server
-            port = start_http_server(6002)
+            file_path = Path(arguments["path"]).resolve()
+            if not file_path.exists():
+                return [TextContent(
+                    type="text",
+                    text=f"Error: File not found: {file_path}"
+                )]
             
-            # Create session
-            import random
-            import time
-            session_id = f"mcp-{int(time.time()*1000):x}-{random.randint(0, 0xffffff):06x}"
-            current_session = {
-                'id': session_id,
-                'port': port
-            }
+            current_xml = file_path.read_text(encoding='utf-8')
+            current_diagram = None  # Clear in-memory diagram when loading from file
             
-            # Open browser
-            import webbrowser
-            browser_url = f"http://localhost:{port}?mcp={session_id}"
-            webbrowser.open(browser_url)
+            # Parse and get basic info
+            cells = get_cells_from_xml(current_xml)
+            vertex_count = sum(1 for c in cells if c['vertex'])
+            edge_count = sum(1 for c in cells if c['edge'])
             
             return [TextContent(
                 type="text",
-                text=f"Session started successfully!\n\nSession ID: {session_id}\nBrowser URL: {browser_url}\n\nThe browser will now show real-time diagram updates. You can now create or edit diagrams."
+                text=f"Loaded diagram from: {file_path}\n\nDiagram contains:\n- {vertex_count} shapes\n- {edge_count} connections\n- {len(cells)} total cells\n\nUse list_cells to see all elements, or get_diagram_xml to see the full XML."
             )]
         except Exception as e:
             return [TextContent(
                 type="text",
-                text=f"Error starting session: {str(e)}"
+                text=f"Error loading diagram: {str(e)}"
             )]
     
-    elif name == "create_diagram":
-        diagram_name = arguments.get("name", "Untitled")
-        current_diagram = Diagram(name=diagram_name)
+    elif name == "save_diagram":
+        try:
+            file_path = Path(arguments["path"]).resolve()
+            if not file_path.suffix:
+                file_path = file_path.with_suffix('.drawio')
+            
+            # Get XML content
+            if current_xml:
+                xml_content = current_xml
+            elif current_diagram:
+                xml_content = current_diagram.to_drawio_xml()
+            else:
+                return [TextContent(
+                    type="text",
+                    text="Error: No diagram to save. Create a diagram first or load an existing one."
+                )]
+            
+            file_path.write_text(xml_content, encoding='utf-8')
+            
+            return [TextContent(
+                type="text",
+                text=f"Diagram saved to: {file_path}\n\nFile size: {len(xml_content)} bytes"
+            )]
+        except Exception as e:
+            return [TextContent(
+                type="text",
+                text=f"Error saving diagram: {str(e)}"
+            )]
+    
+    elif name == "get_diagram_xml":
+        if current_xml:
+            xml_content = current_xml
+        elif current_diagram:
+            xml_content = current_diagram.to_drawio_xml()
+        else:
+            return [TextContent(
+                type="text",
+                text="No diagram available. Create a new diagram or load an existing one."
+            )]
+        
         return [TextContent(
             type="text",
-            text=f"Created new diagram: {diagram_name}\n\nYou can now add shapes and connections. Use display_diagram to show it in the browser."
+            text=f"Draw.io XML ({len(xml_content)} bytes):\n\n{xml_content}"
         )]
+    
+    elif name == "set_diagram_xml":
+        try:
+            xml_content = arguments["xml"]
+            # Validate XML by parsing it
+            parse_drawio_xml(xml_content)
+            current_xml = xml_content
+            current_diagram = None  # Clear in-memory diagram
+            
+            cells = get_cells_from_xml(xml_content)
+            return [TextContent(
+                type="text",
+                text=f"Diagram XML updated successfully.\n\nDiagram now contains {len(cells)} cells."
+            )]
+        except Exception as e:
+            return [TextContent(
+                type="text",
+                text=f"Error: Invalid XML - {str(e)}"
+            )]
+    
+    elif name == "list_cells":
+        if current_xml:
+            cells = get_cells_from_xml(current_xml)
+        elif current_diagram:
+            xml_content = current_diagram.to_drawio_xml()
+            cells = get_cells_from_xml(xml_content)
+        else:
+            return [TextContent(
+                type="text",
+                text="No diagram available. Create a new diagram or load an existing one."
+            )]
+        
+        if not cells:
+            return [TextContent(
+                type="text",
+                text="No cells in the diagram yet."
+            )]
+        
+        # Format cells list
+        cells_list = []
+        for cell in cells:
+            cell_type = "Shape" if cell['vertex'] else ("Connection" if cell['edge'] else "Unknown")
+            label = cell['value'] or "(no label)"
+            pos = f"at ({cell.get('x', '?')}, {cell.get('y', '?')})" if cell['vertex'] else ""
+            if cell['edge']:
+                pos = f"from {cell['source']} to {cell['target']}"
+            
+            cells_list.append(f"- ID: {cell['id']}, Type: {cell_type}, Label: {label} {pos}")
+        
+        return [TextContent(
+            type="text",
+            text=f"Cells in diagram ({len(cells)} total):\n\n" + "\n".join(cells_list)
+        )]
+    
+    elif name == "get_cell":
+        cell_id = arguments["cell_id"]
+        
+        if current_xml:
+            cells = get_cells_from_xml(current_xml)
+        elif current_diagram:
+            xml_content = current_diagram.to_drawio_xml()
+            cells = get_cells_from_xml(xml_content)
+        else:
+            return [TextContent(
+                type="text",
+                text="No diagram available."
+            )]
+        
+        # Find the cell
+        cell = next((c for c in cells if c['id'] == cell_id), None)
+        if not cell:
+            return [TextContent(
+                type="text",
+                text=f"Cell not found: {cell_id}"
+            )]
+        
+        # Format cell info
+        cell_info = f"Cell ID: {cell_id}\n"
+        cell_info += f"Type: {'Shape' if cell['vertex'] else 'Connection'}\n"
+        cell_info += f"Label: {cell['value'] or '(no label)'}\n"
+        cell_info += f"Style: {cell['style'] or '(default)'}\n"
+        if cell['vertex']:
+            cell_info += f"Position: ({cell.get('x', 'N/A')}, {cell.get('y', 'N/A')})\n"
+            cell_info += f"Size: {cell.get('width', 'N/A')} x {cell.get('height', 'N/A')}\n"
+        if cell['edge']:
+            cell_info += f"Source: {cell['source']}\n"
+            cell_info += f"Target: {cell['target']}\n"
+        
+        return [TextContent(
+            type="text",
+            text=cell_info
+        )]
+    
+    elif name == "update_cell":
+        cell_id = arguments["cell_id"]
+        
+        if current_xml:
+            try:
+                # Build updates dict from arguments
+                updates = {}
+                for key in ['value', 'x', 'y', 'width', 'height', 'style']:
+                    if key in arguments:
+                        updates[key] = arguments[key]
+                
+                current_xml = update_cell_in_xml(current_xml, cell_id, **updates)
+                
+                return [TextContent(
+                    type="text",
+                    text=f"Cell {cell_id} updated successfully.\n\nUpdated fields: {', '.join(updates.keys())}"
+                )]
+            except Exception as e:
+                return [TextContent(
+                    type="text",
+                    text=f"Error updating cell: {str(e)}"
+                )]
+        else:
+            return [TextContent(
+                type="text",
+                text="Error: Can only update cells in loaded diagrams. Use load_diagram first."
+            )]
+    
+    elif name == "delete_cell":
+        cell_id = arguments["cell_id"]
+        
+        if current_xml:
+            try:
+                current_xml = delete_cell_in_xml(current_xml, cell_id)
+                return [TextContent(
+                    type="text",
+                    text=f"Cell {cell_id} deleted successfully."
+                )]
+            except Exception as e:
+                return [TextContent(
+                    type="text",
+                    text=f"Error deleting cell: {str(e)}"
+                )]
+        else:
+            return [TextContent(
+                type="text",
+                text="Error: Can only delete cells in loaded diagrams. Use load_diagram first."
+            )]
     
     elif name == "add_shape":
         diagram = get_or_create_diagram()
@@ -434,6 +751,10 @@ async def call_tool(name: str, arguments: Any) -> list[TextContent]:
             shape_type=arguments.get("shape_type", "rectangle"),
             style=arguments.get("style", "")
         )
+        # Update current_xml if we're working with XML
+        if current_xml:
+            current_xml = diagram.to_drawio_xml()
+        
         return [TextContent(
             type="text",
             text=f"Added shape '{arguments['label']}' with ID: {shape_id}"
@@ -449,6 +770,10 @@ async def call_tool(name: str, arguments: Any) -> list[TextContent]:
                 arrow_type=arguments.get("arrow_type", "classic"),
                 style=arguments.get("style", "")
             )
+            # Update current_xml if we're working with XML
+            if current_xml:
+                current_xml = diagram.to_drawio_xml()
+            
             return [TextContent(
                 type="text",
                 text=f"Added connection from {arguments['source_id']} to {arguments['target_id']} with ID: {conn_id}"
@@ -459,192 +784,9 @@ async def call_tool(name: str, arguments: Any) -> list[TextContent]:
                 text=f"Error: {str(e)}"
             )]
     
-    elif name == "display_diagram":
-        diagram = get_or_create_diagram()
-        xml_content = diagram.to_drawio_xml()
-        
-        # If we have a session, push to browser
-        if current_session:
-            session_id = current_session['id']
-            
-            # Save current state to history before updating
-            browser_state = get_state(session_id)
-            if browser_state and browser_state.get('xml'):
-                add_history(session_id, browser_state['xml'], browser_state.get('svg', ''))
-            
-            # Update browser state
-            set_state(session_id, xml_content)
-            
-            # Add new state to history
-            add_history(session_id, xml_content)
-            
-            return [TextContent(
-                type="text",
-                text=f"Diagram displayed in browser!\n\nThe diagram is now visible in your browser window.\n\nXML length: {len(xml_content)} characters\nShapes: {len(diagram.shapes)}\nConnections: {len(diagram.connections)}"
-            )]
-        else:
-            return [TextContent(
-                type="text",
-                text=f"Diagram XML generated:\n\n{xml_content}\n\nNote: No active browser session. Call start_session first for real-time preview, or save this XML to a .drawio file."
-            )]
-    
-    elif name == "edit_diagram":
-        if not current_session:
-            return [TextContent(
-                type="text",
-                text="Error: No active session. Please call start_session first."
-            )]
-        
-        session_id = current_session['id']
-        
-        # Get current state from browser
-        browser_state = get_state(session_id)
-        if not browser_state or not browser_state.get('xml'):
-            return [TextContent(
-                type="text",
-                text="Error: No diagram to edit. Please create a diagram first with display_diagram."
-            )]
-        
-        current_xml = browser_state['xml']
-        
-        # Save state before editing
-        add_history(session_id, current_xml, browser_state.get('svg', ''))
-        
-        # Parse operations
-        ops_data = arguments.get("operations", [])
-        operations = [
-            DiagramOperation(
-                operation=op.get("operation"),
-                cell_id=op.get("cell_id"),
-                new_xml=op.get("new_xml")
-            )
-            for op in ops_data
-        ]
-        
-        # Apply operations
-        result = apply_diagram_operations(current_xml, operations)
-        errors = result.get('errors', [])
-        new_xml = result.get('result', current_xml)
-        
-        # Update state
-        set_state(session_id, new_xml)
-        add_history(session_id, new_xml)
-        
-        # Build response
-        success_msg = f"Diagram edited successfully!\n\nApplied {len(operations)} operation(s)."
-        error_msg = ""
-        if errors:
-            error_list = "\n".join([f"- {e.type} {e.cell_id}: {e.message}" for e in errors])
-            error_msg = f"\n\nWarnings:\n{error_list}"
-        
-        return [TextContent(
-            type="text",
-            text=success_msg + error_msg
-        )]
-    
-    elif name == "get_diagram":
-        # Try to get from browser first if we have a session
-        if current_session:
-            session_id = current_session['id']
-            browser_state = get_state(session_id)
-            if browser_state and browser_state.get('xml'):
-                xml_content = browser_state['xml']
-                
-                # Extract cell info for easier editing
-                cells = extract_cells_info(xml_content)
-                cells_summary = "\n".join([
-                    f"  - ID: {c['id']}, Label: {c.get('value', 'N/A')}, Type: {'edge' if c.get('edge') else 'vertex'}"
-                    for c in cells[:20]  # Show first 20
-                ])
-                if len(cells) > 20:
-                    cells_summary += f"\n  ... and {len(cells) - 20} more cells"
-                
-                return [TextContent(
-                    type="text",
-                    text=f"Current diagram XML:\n\n{xml_content}\n\n--- Cell Summary ({len(cells)} cells) ---\n{cells_summary}"
-                )]
-        
-        # Fallback to current diagram
-        diagram = get_or_create_diagram()
-        xml_content = diagram.to_drawio_xml()
-        return [TextContent(
-            type="text",
-            text=f"Current diagram XML:\n\n{xml_content}\n\nYou can save this to a .drawio file and open it in Draw.io or VS Code with the Draw.io extension."
-        )]
-    
     elif name == "list_shapes":
-        diagram = get_or_create_diagram()
-        if not diagram.shapes:
-            return [TextContent(
-                type="text",
-                text="No shapes in the diagram yet."
-            )]
-        
-        shapes_list = []
-        for shape in diagram.shapes.values():
-            shapes_list.append(
-                f"- {shape.id}: '{shape.label}' ({shape.shape_type}) at ({shape.x}, {shape.y})"
-            )
-        
-        return [TextContent(
-            type="text",
-            text="Shapes in diagram:\n" + "\n".join(shapes_list)
-        )]
-    
-    elif name == "export_diagram":
-        export_path = arguments.get("path", "diagram.drawio")
-        
-        # Get XML content
-        xml_content = None
-        if current_session:
-            session_id = current_session['id']
-            browser_state = get_state(session_id)
-            if browser_state and browser_state.get('xml'):
-                xml_content = browser_state['xml']
-        
-        if not xml_content:
-            diagram = get_or_create_diagram()
-            xml_content = diagram.to_drawio_xml()
-        
-        # Ensure .drawio extension
-        if not export_path.endswith('.drawio'):
-            export_path += '.drawio'
-        
-        # Write to file
-        try:
-            file_path = Path(export_path).resolve()
-            file_path.write_text(xml_content, encoding='utf-8')
-            
-            return [TextContent(
-                type="text",
-                text=f"Diagram exported successfully!\n\nFile: {file_path}\nSize: {len(xml_content)} characters"
-            )]
-        except Exception as e:
-            return [TextContent(
-                type="text",
-                text=f"Error exporting diagram: {str(e)}"
-            )]
-    
-    elif name == "get_history":
-        if not current_session:
-            return [TextContent(
-                type="text",
-                text="No active session. History is only available for browser sessions."
-            )]
-        
-        session_id = current_session['id']
-        count = get_history_count(session_id)
-        
-        if count == 0:
-            return [TextContent(
-                type="text",
-                text="No history available yet. History is saved each time you display or edit the diagram."
-            )]
-        
-        return [TextContent(
-            type="text",
-            text=f"History: {count} version(s) saved for this session.\n\nYou can restore previous versions by manually copying earlier XML from get_diagram calls."
-        )]
+        # Deprecated - redirect to list_cells
+        return await call_tool("list_cells", {})
     
     else:
         return [TextContent(
