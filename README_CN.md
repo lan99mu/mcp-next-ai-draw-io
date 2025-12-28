@@ -218,6 +218,8 @@ add_connection(source_id, target_id,
 
 ## 支持的形状类型
 
+### 基础形状
+
 - `rectangle` - 标准矩形框
 - `ellipse` - 圆形/椭圆形
 - `diamond` - 菱形（用于决策）
@@ -225,6 +227,25 @@ add_connection(source_id, target_id,
 - `hexagon` - 六边形（用于准备）
 - `cylinder` - 圆柱形（用于数据库）
 - `cloud` - 云形（用于云服务）
+
+### 活动图形状
+
+- `activity_start` - 开始节点（实心圆）
+- `activity_end` - 结束节点（带边框的实心圆）
+- `activity_action` - 活动/动作框（圆角矩形）
+- `activity_decision` - 决策节点（菱形）
+- `activity_fork` - 分支节点（用于并行流的水平/垂直条）
+- `activity_join` - 合并节点（用于合并流的水平/垂直条）
+- `activity_send_signal` - 发送信号形状
+- `activity_receive_signal` - 接收信号形状
+- `activity_note` - 注释/备注形状
+
+### 泳道图形状
+
+- `swimlane_pool` - 泳道池/容器
+- `swimlane_h` - 水平泳道
+- `swimlane_v` - 垂直泳道
+- `container` - 通用容器，用于分组元素
 
 可以通过 `style` 参数使用 Draw.io 样式字符串来使用自定义形状。
 

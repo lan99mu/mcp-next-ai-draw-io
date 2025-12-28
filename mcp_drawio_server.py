@@ -198,6 +198,7 @@ class Diagram:
     def _get_default_style(shape_type: str) -> str:
         """Get default style for a shape type"""
         styles = {
+            # Basic shapes
             "rectangle": "rounded=0;whiteSpace=wrap;html=1;",
             "ellipse": "ellipse;whiteSpace=wrap;html=1;",
             "diamond": "rhombus;whiteSpace=wrap;html=1;",
@@ -205,6 +206,23 @@ class Diagram:
             "hexagon": "shape=hexagon;perimeter=hexagonPerimeter2;whiteSpace=wrap;html=1;",
             "cylinder": "shape=cylinder3;whiteSpace=wrap;html=1;boundedLbl=1;backgroundOutline=1;size=15;",
             "cloud": "ellipse;shape=cloud;whiteSpace=wrap;html=1;",
+            
+            # Activity diagram shapes
+            "activity_start": "ellipse;whiteSpace=wrap;html=1;fillColor=#000000;",
+            "activity_end": "ellipse;whiteSpace=wrap;html=1;fillColor=#000000;strokeWidth=3;",
+            "activity_action": "rounded=1;whiteSpace=wrap;html=1;arcSize=40;",
+            "activity_decision": "rhombus;whiteSpace=wrap;html=1;",
+            "activity_fork": "shape=line;strokeWidth=4;html=1;",
+            "activity_join": "shape=line;strokeWidth=4;html=1;",
+            "activity_send_signal": "shape=message;whiteSpace=wrap;html=1;outlineConnect=0;",
+            "activity_receive_signal": "shape=message;whiteSpace=wrap;html=1;outlineConnect=0;",
+            "activity_note": "shape=note;whiteSpace=wrap;html=1;backgroundOutline=1;size=15;",
+            
+            # Swimlane shapes
+            "swimlane_pool": "swimlane;whiteSpace=wrap;html=1;",
+            "swimlane_h": "swimlane;horizontal=0;whiteSpace=wrap;html=1;",
+            "swimlane_v": "swimlane;horizontal=1;whiteSpace=wrap;html=1;",
+            "container": "swimlane;whiteSpace=wrap;html=1;startSize=23;",
         }
         return styles.get(shape_type, styles["rectangle"])
 
@@ -493,8 +511,16 @@ async def list_tools() -> list[Tool]:
                     },
                     "shape_type": {
                         "type": "string",
-                        "description": "Type of shape (default: rectangle)",
-                        "enum": ["rectangle", "ellipse", "diamond", "parallelogram", "hexagon", "cylinder", "cloud"],
+                        "description": "Type of shape (default: rectangle). Includes basic shapes, activity diagram shapes, and swimlane shapes.",
+                        "enum": [
+                            # Basic shapes
+                            "rectangle", "ellipse", "diamond", "parallelogram", "hexagon", "cylinder", "cloud",
+                            # Activity diagram shapes
+                            "activity_start", "activity_end", "activity_action", "activity_decision", 
+                            "activity_fork", "activity_join", "activity_send_signal", "activity_receive_signal", "activity_note",
+                            # Swimlane shapes
+                            "swimlane_pool", "swimlane_h", "swimlane_v", "container"
+                        ],
                         "default": "rectangle"
                     },
                     "style": {

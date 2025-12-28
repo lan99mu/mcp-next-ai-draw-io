@@ -222,6 +222,8 @@ add_connection(source_id, target_id,
 
 ## Supported Shape Types / 支持的形状类型
 
+### Basic Shapes / 基础形状
+
 - `rectangle` - Standard rectangular box
 - `ellipse` - Circular/oval shape
 - `diamond` - Diamond shape (for decisions)
@@ -229,6 +231,25 @@ add_connection(source_id, target_id,
 - `hexagon` - Hexagon (for preparation)
 - `cylinder` - Cylinder (for databases)
 - `cloud` - Cloud shape (for cloud services)
+
+### Activity Diagram Shapes / 活动图形状
+
+- `activity_start` - Start node (filled circle)
+- `activity_end` - End node (filled circle with border)
+- `activity_action` - Action/activity box (rounded rectangle)
+- `activity_decision` - Decision node (diamond)
+- `activity_fork` - Fork node (horizontal/vertical bar for parallel flows)
+- `activity_join` - Join node (horizontal/vertical bar for merging flows)
+- `activity_send_signal` - Send signal shape
+- `activity_receive_signal` - Receive signal shape
+- `activity_note` - Note/comment shape
+
+### Swimlane Shapes / 泳道图形状
+
+- `swimlane_pool` - Swimlane pool/container
+- `swimlane_h` - Horizontal swimlane
+- `swimlane_v` - Vertical swimlane
+- `container` - Generic container for grouping elements
 
 Custom shapes can be used via the `style` parameter with Draw.io style strings.
 

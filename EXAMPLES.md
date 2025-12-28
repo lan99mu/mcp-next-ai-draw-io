@@ -223,3 +223,121 @@ The MCP server now supports fine-grained control over connection label positioni
    ```
 
 This gives you complete control over how connection labels appear in your diagrams!
+
+## Activity Diagrams
+
+### Example 8: Creating an Activity Diagram
+
+**Prompt to AI:**
+```
+Create an activity diagram for a user login process:
+- Start node (activity_start)
+- "Enter Credentials" action (activity_action)
+- "Valid?" decision (activity_decision)
+- Fork node for parallel tasks (activity_fork)
+- "Log Activity" action (activity_action)
+- "Load Profile" action (activity_action)
+- Join node (activity_join)
+- End node (activity_end)
+- Add a note (activity_note) explaining the validation process
+```
+
+**Expected Result:**
+A complete activity diagram with start/end nodes, actions, decision points, and parallel execution paths.
+
+### Activity Diagram Shape Types
+
+The MCP server now supports specialized shapes for UML activity diagrams:
+
+- **`activity_start`** - Start node (filled black circle)
+- **`activity_end`** - End node (filled circle with thick border)
+- **`activity_action`** - Action/activity (rounded rectangle)
+- **`activity_decision`** - Decision node (diamond)
+- **`activity_fork`** - Fork node (thick horizontal/vertical bar for splitting parallel flows)
+- **`activity_join`** - Join node (thick horizontal/vertical bar for merging parallel flows)
+- **`activity_send_signal`** - Send signal shape
+- **`activity_receive_signal`** - Receive signal shape
+- **`activity_note`** - Note/comment annotation
+
+### Example 9: Advanced Activity Diagram with Parallel Flows
+
+**Prompt to AI:**
+```
+Create an activity diagram for order processing with parallel execution:
+1. Start with activity_start
+2. "Receive Order" (activity_action)
+3. "Validate Order" (activity_decision)
+4. If valid, use activity_fork to split into parallel tasks:
+   - "Process Payment" (activity_action)
+   - "Reserve Inventory" (activity_action)
+5. Use activity_join to merge the parallel flows
+6. "Ship Order" (activity_action)
+7. End with activity_end
+
+Add a note (activity_note) explaining that payment and inventory are processed in parallel.
+```
+
+## Swimlane Diagrams
+
+### Example 10: Creating a Swimlane Diagram
+
+**Prompt to AI:**
+```
+Create a horizontal swimlane diagram for a customer support process:
+- Create a pool "Customer Support Process" (swimlane_pool)
+- Add three horizontal lanes (swimlane_h):
+  - "Customer" lane
+  - "Support Agent" lane
+  - "Technical Team" lane
+- Add activities in each lane:
+  - Customer: "Submit Ticket" (activity_action)
+  - Support Agent: "Review Ticket" (activity_action), "Assign to Tech" (activity_action)
+  - Technical Team: "Investigate" (activity_action), "Resolve Issue" (activity_action)
+- Connect the activities with arrows showing the flow
+```
+
+**Expected Result:**
+A swimlane diagram with three horizontal lanes showing the cross-functional process flow.
+
+### Swimlane Shape Types
+
+The MCP server supports swimlane diagrams for showing cross-functional processes:
+
+- **`swimlane_pool`** - Overall container/pool for the entire process
+- **`swimlane_h`** - Horizontal swimlane (lane goes left-to-right)
+- **`swimlane_v`** - Vertical swimlane (lane goes top-to-bottom)
+- **`container`** - Generic container for grouping related elements
+
+### Example 11: Vertical Swimlane Diagram
+
+**Prompt to AI:**
+```
+Create a vertical swimlane diagram for a software development pipeline:
+- Create a container "CI/CD Pipeline" (container)
+- Add three vertical lanes (swimlane_v):
+  - "Build" stage
+  - "Test" stage
+  - "Deploy" stage
+- Add activities in each stage:
+  - Build: "Compile Code" (activity_action)
+  - Test: "Run Tests" (activity_action), "Security Scan" (activity_action)
+  - Deploy: "Deploy to Staging" (activity_action), "Deploy to Production" (activity_action)
+- Connect activities showing the pipeline flow
+```
+
+### Tips for Activity and Swimlane Diagrams
+
+1. **Use the right shapes for the job**:
+   - Activity diagrams: Use activity_start/end for clear flow boundaries
+   - Use activity_fork/join for parallel execution
+   - Use activity_decision for branching logic
+
+2. **Swimlane organization**:
+   - Use swimlane_h for processes that flow left-to-right (horizontal)
+   - Use swimlane_v for processes that flow top-to-bottom (vertical)
+   - Place activities within their appropriate lane to show responsibility
+
+3. **Combine with other shapes**:
+   - You can mix activity shapes with basic shapes for flexibility
+   - Use activity_note to add explanatory comments
+   - Use connections with labels to show transitions and conditions
