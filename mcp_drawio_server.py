@@ -511,14 +511,11 @@ async def list_tools() -> list[Tool]:
                     },
                     "shape_type": {
                         "type": "string",
-                        "description": "Type of shape (default: rectangle). Includes basic shapes, activity diagram shapes, and swimlane shapes.",
+                        "description": "Type of shape (default: rectangle). Includes basic shapes (rectangle, ellipse, diamond, parallelogram, hexagon, cylinder, cloud), activity diagram shapes (activity_start, activity_end, activity_action, activity_decision, activity_fork, activity_join, activity_send_signal, activity_receive_signal, activity_note), and swimlane shapes (swimlane_pool, swimlane_h, swimlane_v, container).",
                         "enum": [
-                            # Basic shapes
                             "rectangle", "ellipse", "diamond", "parallelogram", "hexagon", "cylinder", "cloud",
-                            # Activity diagram shapes
                             "activity_start", "activity_end", "activity_action", "activity_decision", 
                             "activity_fork", "activity_join", "activity_send_signal", "activity_receive_signal", "activity_note",
-                            # Swimlane shapes
                             "swimlane_pool", "swimlane_h", "swimlane_v", "container"
                         ],
                         "default": "rectangle"
