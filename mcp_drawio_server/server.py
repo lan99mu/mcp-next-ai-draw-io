@@ -14,217 +14,19 @@ Core capabilities:
 """
 
 import asyncio
-import json
-import base64
-from datetime import datetime, timezone
 from typing import Any, Optional
-from pathlib import Path
-from xml.dom import minidom
 from mcp.server import Server
 from mcp.server.stdio import stdio_server
 from mcp.types import Tool, TextContent
-from pydantic import BaseModel, Field
 
-
-class DiagramElement(BaseModel):
-    """Base class for diagram elements"""
-    id: str
-    label: str = ""
-    style: str = ""
-
-
-class Shape(DiagramElement):
-    """Represents a shape/node in the diagram"""
-    x: float = 0
-    y: float = 0
-    width: float = 120
-    height: float = 60
-    shape_type: str = "rectangle"
-
-
-class Connection(DiagramElement):
-    """Represents a connection/edge between shapes"""
-    source_id: str
-    target_id: str
-    arrow_type: str = "classic"
-    label_position: Optional[str] = None  # "left", "right", "center"
-    label_offset_x: Optional[float] = None  # X offset for label position
-    label_offset_y: Optional[float] = None  # Y offset for label position
-    label_background_color: Optional[str] = None  # Background color for label
-
-
-class Diagram:
-    """Manages a Draw.io diagram structure"""
-    
-    def __init__(self, name: str = "Untitled"):
-        self.name = name
-        self.shapes: dict[str, Shape] = {}
-        self.connections: dict[str, Connection] = {}
-        self.next_id = 1
-        
-    def add_shape(
-        self, 
-        label: str, 
-        x: float = 0, 
-        y: float = 0,
-        width: float = 120,
-        height: float = 60,
-        shape_type: str = "rectangle",
-        style: str = ""
-    ) -> str:
-        """Add a shape to the diagram"""
-        shape_id = f"shape_{self.next_id}"
-        self.next_id += 1
-        
-        self.shapes[shape_id] = Shape(
-            id=shape_id,
-            label=label,
-            x=x,
-            y=y,
-            width=width,
-            height=height,
-            shape_type=shape_type,
-            style=style
-        )
-        return shape_id
-    
-    def add_connection(
-        self,
-        source_id: str,
-        target_id: str,
-        label: str = "",
-        arrow_type: str = "classic",
-        style: str = "",
-        label_position: Optional[str] = None,
-        label_offset_x: Optional[float] = None,
-        label_offset_y: Optional[float] = None,
-        label_background_color: Optional[str] = None
-    ) -> str:
-        """Add a connection between two shapes"""
-        if source_id not in self.shapes or target_id not in self.shapes:
-            raise ValueError("Source or target shape not found")
-            
-        conn_id = f"conn_{self.next_id}"
-        self.next_id += 1
-        
-        self.connections[conn_id] = Connection(
-            id=conn_id,
-            label=label,
-            source_id=source_id,
-            target_id=target_id,
-            arrow_type=arrow_type,
-            style=style,
-            label_position=label_position,
-            label_offset_x=label_offset_x,
-            label_offset_y=label_offset_y,
-            label_background_color=label_background_color
-        )
-        return conn_id
-    
-    def to_drawio_xml(self) -> str:
-        """Convert diagram to Draw.io XML format"""
-        timestamp = datetime.now(timezone.utc).isoformat().replace('+00:00', 'Z')
-        xml_parts = [f'<mxfile host="MCP Draw.io Server" modified="{timestamp}" version="1.0.0">']
-        xml_parts.append('  <diagram name="{}" id="diagram1">'.format(self.name))
-        xml_parts.append('    <mxGraphModel dx="1422" dy="794" grid="1" gridSize="10" guides="1" tooltips="1" connect="1" arrows="1" fold="1" page="1" pageScale="1" pageWidth="827" pageHeight="1169" math="0" shadow="0">')
-        xml_parts.append('      <root>')
-        xml_parts.append('        <mxCell id="0"/>')
-        xml_parts.append('        <mxCell id="1" parent="0"/>')
-        
-        # Add shapes
-        for shape in self.shapes.values():
-            style = shape.style or self._get_default_style(shape.shape_type)
-            xml_parts.append(
-                f'        <mxCell id="{shape.id}" value="{self._escape_xml(shape.label)}" '
-                f'style="{style}" vertex="1" parent="1">'
-            )
-            xml_parts.append(
-                f'          <mxGeometry x="{shape.x}" y="{shape.y}" '
-                f'width="{shape.width}" height="{shape.height}" as="geometry"/>'
-            )
-            xml_parts.append('        </mxCell>')
-        
-        # Add connections
-        for conn in self.connections.values():
-            # Build style string with label positioning
-            if conn.style:
-                style = conn.style
-            else:
-                style = f"edgeStyle=orthogonalEdgeStyle;rounded=0;orthogonalLoop=1;jettySize=auto;html=1;endArrow={conn.arrow_type};"
-            
-            # Add label position to style if specified
-            if conn.label_position:
-                style += f"labelPosition={conn.label_position};"
-            
-            # Add label background color to style if specified
-            if conn.label_background_color:
-                style += f"labelBackgroundColor={conn.label_background_color};"
-            
-            xml_parts.append(
-                f'        <mxCell id="{conn.id}" value="{self._escape_xml(conn.label)}" '
-                f'style="{style}" edge="1" parent="1" source="{conn.source_id}" target="{conn.target_id}">'
-            )
-            
-            # Add geometry with label offset if specified
-            if conn.label_offset_x is not None or conn.label_offset_y is not None:
-                offset_x = conn.label_offset_x if conn.label_offset_x is not None else 0
-                offset_y = conn.label_offset_y if conn.label_offset_y is not None else 0
-                xml_parts.append(f'          <mxGeometry relative="1" as="geometry">')
-                xml_parts.append(f'            <mxPoint x="{offset_x}" y="{offset_y}" as="offset"/>')
-                xml_parts.append('          </mxGeometry>')
-            else:
-                xml_parts.append('          <mxGeometry relative="1" as="geometry"/>')
-            
-            xml_parts.append('        </mxCell>')
-        
-        xml_parts.append('      </root>')
-        xml_parts.append('    </mxGraphModel>')
-        xml_parts.append('  </diagram>')
-        xml_parts.append('</mxfile>')
-        
-        return '\n'.join(xml_parts)
-    
-    @staticmethod
-    def _escape_xml(text: str) -> str:
-        """Escape special XML characters"""
-        return (text
-                .replace('&', '&amp;')
-                .replace('<', '&lt;')
-                .replace('>', '&gt;')
-                .replace('"', '&quot;')
-                .replace("'", '&apos;'))
-    
-    @staticmethod
-    def _get_default_style(shape_type: str) -> str:
-        """Get default style for a shape type"""
-        styles = {
-            # Basic shapes
-            "rectangle": "rounded=0;whiteSpace=wrap;html=1;",
-            "ellipse": "ellipse;whiteSpace=wrap;html=1;",
-            "diamond": "rhombus;whiteSpace=wrap;html=1;",
-            "parallelogram": "shape=parallelogram;perimeter=parallelogramPerimeter;whiteSpace=wrap;html=1;",
-            "hexagon": "shape=hexagon;perimeter=hexagonPerimeter2;whiteSpace=wrap;html=1;",
-            "cylinder": "shape=cylinder3;whiteSpace=wrap;html=1;boundedLbl=1;backgroundOutline=1;size=15;",
-            "cloud": "ellipse;shape=cloud;whiteSpace=wrap;html=1;",
-            
-            # Activity diagram shapes
-            "activity_start": "ellipse;whiteSpace=wrap;html=1;fillColor=#000000;",
-            "activity_end": "ellipse;whiteSpace=wrap;html=1;fillColor=#000000;strokeWidth=3;",
-            "activity_action": "rounded=1;whiteSpace=wrap;html=1;arcSize=40;",
-            "activity_decision": "rhombus;whiteSpace=wrap;html=1;",
-            "activity_fork": "shape=line;strokeWidth=4;html=1;",
-            "activity_join": "shape=line;strokeWidth=4;html=1;",
-            "activity_send_signal": "shape=message;whiteSpace=wrap;html=1;outlineConnect=0;",
-            "activity_receive_signal": "shape=message;whiteSpace=wrap;html=1;outlineConnect=0;",
-            "activity_note": "shape=note;whiteSpace=wrap;html=1;backgroundOutline=1;size=15;",
-            
-            # Swimlane shapes
-            "swimlane_pool": "swimlane;whiteSpace=wrap;html=1;",
-            "swimlane_h": "swimlane;horizontal=0;whiteSpace=wrap;html=1;",
-            "swimlane_v": "swimlane;horizontal=1;whiteSpace=wrap;html=1;",
-            "container": "swimlane;whiteSpace=wrap;html=1;startSize=23;",
-        }
-        return styles.get(shape_type, styles["rectangle"])
+from .diagram import Diagram
+from .xml_operations import (
+    parse_drawio_xml,
+    get_cells_from_xml,
+    update_cell_in_xml,
+    delete_cell_in_xml,
+)
+from .file_operations import load_diagram_file, save_diagram_file
 
 
 # Global diagram storage
@@ -239,98 +41,6 @@ def get_or_create_diagram() -> Diagram:
     if current_diagram is None:
         current_diagram = Diagram()
     return current_diagram
-
-
-def parse_drawio_xml(xml_content: str) -> minidom.Document:
-    """Parse Draw.io XML and return DOM document"""
-    return minidom.parseString(xml_content)
-
-
-def get_cells_from_xml(xml_content: str) -> list[dict]:
-    """Extract all cells from Draw.io XML"""
-    try:
-        doc = parse_drawio_xml(xml_content)
-        cells = []
-        
-        for cell in doc.getElementsByTagName('mxCell'):
-            cell_id = cell.getAttribute('id')
-            if cell_id and cell_id not in ['0', '1']:  # Skip default root cells
-                cell_info = {
-                    'id': cell_id,
-                    'value': cell.getAttribute('value'),
-                    'style': cell.getAttribute('style'),
-                    'vertex': cell.getAttribute('vertex') == '1',
-                    'edge': cell.getAttribute('edge') == '1',
-                    'source': cell.getAttribute('source'),
-                    'target': cell.getAttribute('target'),
-                }
-                
-                # Get geometry if available
-                geom = cell.getElementsByTagName('mxGeometry')
-                if geom:
-                    g = geom[0]
-                    cell_info['x'] = g.getAttribute('x')
-                    cell_info['y'] = g.getAttribute('y')
-                    cell_info['width'] = g.getAttribute('width')
-                    cell_info['height'] = g.getAttribute('height')
-                
-                cells.append(cell_info)
-        
-        return cells
-    except Exception as e:
-        # Log error and return empty list
-        print(f"Warning: Failed to parse XML for cells: {str(e)}")
-        return []
-
-
-def update_cell_in_xml(xml_content: str, cell_id: str, **updates) -> str:
-    """Update a cell in the XML by ID"""
-    try:
-        doc = parse_drawio_xml(xml_content)
-        
-        # Find the cell
-        for cell in doc.getElementsByTagName('mxCell'):
-            if cell.getAttribute('id') == cell_id:
-                # Update attributes
-                if 'value' in updates and updates['value'] is not None:
-                    cell.setAttribute('value', str(updates['value']))
-                if 'style' in updates and updates['style'] is not None:
-                    cell.setAttribute('style', str(updates['style']))
-                
-                # Update geometry
-                geom_elements = cell.getElementsByTagName('mxGeometry')
-                if geom_elements and any(k in updates for k in ['x', 'y', 'width', 'height']):
-                    geom = geom_elements[0]
-                    if 'x' in updates and updates['x'] is not None:
-                        geom.setAttribute('x', str(updates['x']))
-                    if 'y' in updates and updates['y'] is not None:
-                        geom.setAttribute('y', str(updates['y']))
-                    if 'width' in updates and updates['width'] is not None:
-                        geom.setAttribute('width', str(updates['width']))
-                    if 'height' in updates and updates['height'] is not None:
-                        geom.setAttribute('height', str(updates['height']))
-                
-                break
-        
-        return doc.toxml()
-    except Exception as e:
-        raise ValueError(f"Failed to update cell: {str(e)}")
-
-
-def delete_cell_in_xml(xml_content: str, cell_id: str) -> str:
-    """Delete a cell from the XML by ID"""
-    try:
-        doc = parse_drawio_xml(xml_content)
-        
-        # Find and remove the cell
-        for cell in doc.getElementsByTagName('mxCell'):
-            if cell.getAttribute('id') == cell_id:
-                cell.parentNode.removeChild(cell)
-                break
-        
-        return doc.toxml()
-    except Exception as e:
-        raise ValueError(f"Failed to delete cell: {str(e)}")
 
 
 # Initialize MCP server
@@ -607,14 +317,8 @@ async def call_tool(name: str, arguments: Any) -> list[TextContent]:
     
     elif name == "load_diagram":
         try:
-            file_path = Path(arguments["path"]).resolve()
-            if not file_path.exists():
-                return [TextContent(
-                    type="text",
-                    text=f"Error: File not found: {file_path}"
-                )]
-            
-            current_xml = file_path.read_text(encoding='utf-8')
+            file_path = arguments["path"]
+            current_xml = load_diagram_file(file_path)
             current_diagram = None  # Clear in-memory diagram when loading from file
             
             # Parse and get basic info
@@ -626,6 +330,11 @@ async def call_tool(name: str, arguments: Any) -> list[TextContent]:
                 type="text",
                 text=f"Loaded diagram from: {file_path}\n\nDiagram contains:\n- {vertex_count} shapes\n- {edge_count} connections\n- {len(cells)} total cells\n\nUse list_cells to see all elements, or get_diagram_xml to see the full XML."
             )]
+        except FileNotFoundError as e:
+            return [TextContent(
+                type="text",
+                text=f"Error: {str(e)}"
+            )]
         except Exception as e:
             return [TextContent(
                 type="text",
@@ -634,9 +343,7 @@ async def call_tool(name: str, arguments: Any) -> list[TextContent]:
     
     elif name == "save_diagram":
         try:
-            file_path = Path(arguments["path"]).resolve()
-            if not file_path.suffix:
-                file_path = file_path.with_suffix('.drawio')
+            file_path = arguments["path"]
             
             # Get XML content
             if current_xml:
@@ -649,11 +356,11 @@ async def call_tool(name: str, arguments: Any) -> list[TextContent]:
                     text="Error: No diagram to save. Create a diagram first or load an existing one."
                 )]
             
-            file_path.write_text(xml_content, encoding='utf-8')
+            bytes_written = save_diagram_file(file_path, xml_content)
             
             return [TextContent(
                 type="text",
-                text=f"Diagram saved to: {file_path}\n\nFile size: {len(xml_content)} bytes"
+                text=f"Diagram saved to: {file_path}\n\nFile size: {bytes_written} bytes"
             )]
         except Exception as e:
             return [TextContent(
