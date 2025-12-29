@@ -50,6 +50,7 @@
 - 🎨 **样式** - 自定义 Draw.io 样式字符串以实现高级控制
 - 📍 **坐标系统** - 获取详细的位置信息（坐标、中心点、边界框）以便更好地进行空间推理
 - 🔗 **节点绑定** - 将节点绑定在一起，作为一组移动
+- 🔀 **连接定位** - 控制入口/出口点和路径点，实现精确的连接位置
 
 ### 相比基础版本的改进
 
@@ -222,6 +223,76 @@ add_connection(source_id, target_id,
     label_offset_y=5,
     label_background_color="#e3f2fd")
 ```
+
+### 连接定位（入口/出口点和路径点）
+
+`add_connection` 工具支持精确控制连接线如何以及在何处附着到形状上：
+
+#### 入口/出口点
+
+使用归一化坐标（0-1）控制连接线附着到形状的位置：
+- **`exit_x`**, **`exit_y`** - 连接线从源形状的哪里退出
+- **`entry_x`**, **`entry_y`** - 连接线从哪里进入目标形状
+- 坐标：`0.0` = 左/上，`0.5` = 中间，`1.0` = 右/下
+
+**示例：**
+```python
+# 从源的右侧连接到目标的左侧
+add_connection(source_id, target_id,
+    exit_x=1.0, exit_y=0.5,    # 从源的右中退出
+    entry_x=0.0, entry_y=0.5)  # 从目标的左中进入
+
+# 从源的底部连接到目标的顶部
+add_connection(source_id, target_id,
+    exit_x=0.5, exit_y=1.0,    # 从底部中心退出
+    entry_x=0.5, entry_y=0.0)  # 从顶部中心进入
+```
+
+#### 路径点
+
+使用中间路径点（绝对像素坐标）创建自定义路由路径：
+- **`waypoints`** - `[x, y]` 坐标列表，用于中间路由点
+
+**示例：**
+```python
+# 简单的 L 形路径
+add_connection(source_id, target_id,
+    waypoints=[[250, 150]])
+
+# 具有多个路径点的复杂路由
+add_connection(source_id, target_id,
+    waypoints=[
+        [200, 130],  # 第一个转弯
+        [200, 90],   # 第二个转弯
+        [450, 90]    # 最终接近
+    ])
+
+# 绕过障碍物的路由
+add_connection(source_id, target_id,
+    waypoints=[[150, 200], [350, 200], [350, 300]])
+```
+
+#### 组合功能
+
+所有连接功能可以组合使用以实现完全控制：
+
+```python
+# 专业的网络连接
+add_connection(gateway, service,
+    label="API 调用",
+    exit_x=0.5, exit_y=1.0,              # 从底部退出
+    entry_x=0.5, entry_y=0.0,            # 从顶部进入
+    waypoints=[[300, 150]],              # 通过路径点路由
+    label_position="center",             # 居中标签
+    label_background_color="#e3f2fd")    # 浅蓝色背景
+```
+
+**使用场景：**
+- 具有精确连接点的网络拓扑图
+- 具有清晰路由的系统架构图
+- 具有自定义路径路由的流程图
+- 专业技术图表
+
 
 ### 坐标系统
 

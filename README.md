@@ -52,6 +52,7 @@ This MCP server follows the principle of **tool encapsulation** rather than appl
 - 🎨 **Styling** - Custom Draw.io style strings for advanced control
 - 📍 **Coordinate System** - Get detailed position information (coordinates, center, bounding box) for better spatial reasoning
 - 🔗 **Node Binding** - Bind nodes together to move them as a group
+- 🔀 **Connection Positioning** - Control entry/exit points and waypoint routing for precise connection placement
 
 ### Key Improvements Over Basic Version / 相比基础版本的改进
 
@@ -226,6 +227,76 @@ add_connection(source_id, target_id,
     label_offset_y=5,
     label_background_color="#e3f2fd")
 ```
+
+### Connection Positioning (Entry/Exit Points & Waypoints) / 连接定位（入口/出口点和路径点）
+
+The `add_connection` tool supports precise control over where and how connections attach to shapes:
+
+#### Entry/Exit Points / 入口/出口点
+
+Control where connections attach to shapes using normalized coordinates (0-1):
+- **`exit_x`**, **`exit_y`** - Where the connection exits the source shape
+- **`entry_x`**, **`entry_y`** - Where the connection enters the target shape
+- Coordinates: `0.0` = left/top, `0.5` = center, `1.0` = right/bottom
+
+**Examples:**
+```python
+# Connect from right side of source to left side of target
+add_connection(source_id, target_id,
+    exit_x=1.0, exit_y=0.5,    # Exit right-center of source
+    entry_x=0.0, entry_y=0.5)  # Enter left-center of target
+
+# Connect from bottom of source to top of target
+add_connection(source_id, target_id,
+    exit_x=0.5, exit_y=1.0,    # Exit bottom-center
+    entry_x=0.5, entry_y=0.0)  # Enter top-center
+```
+
+#### Waypoints / 路径点
+
+Create custom routing paths with intermediate waypoints (absolute pixel coordinates):
+- **`waypoints`** - List of `[x, y]` coordinates for intermediate routing points
+
+**Examples:**
+```python
+# Simple L-shaped path
+add_connection(source_id, target_id,
+    waypoints=[[250, 150]])
+
+# Complex routing with multiple waypoints
+add_connection(source_id, target_id,
+    waypoints=[
+        [200, 130],  # First turn
+        [200, 90],   # Second turn
+        [450, 90]    # Final approach
+    ])
+
+# Route around an obstacle
+add_connection(source_id, target_id,
+    waypoints=[[150, 200], [350, 200], [350, 300]])
+```
+
+#### Combined Features / 组合功能
+
+All connection features can be combined for complete control:
+
+```python
+# Professional network connection
+add_connection(gateway, service,
+    label="API Call",
+    exit_x=0.5, exit_y=1.0,              # Exit from bottom
+    entry_x=0.5, entry_y=0.0,            # Enter from top
+    waypoints=[[300, 150]],              # Route through waypoint
+    label_position="center",             # Center label
+    label_background_color="#e3f2fd")    # Light blue background
+```
+
+**Use Cases:**
+- Network topology diagrams with precise connection points
+- System architecture with clean routing
+- Flowcharts with custom path routing
+- Professional technical diagrams
+
 
 ### Coordinate System / 坐标系统
 
