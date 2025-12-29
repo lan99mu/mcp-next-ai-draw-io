@@ -25,6 +25,7 @@ class Shape(DiagramElement):
     width: float = 120
     height: float = 60
     shape_type: str = "rectangle"
+    bound_nodes: list[str] = Field(default_factory=list)  # IDs of nodes bound to this one
 
 
 class Connection(DiagramElement):

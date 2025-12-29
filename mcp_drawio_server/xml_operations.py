@@ -32,6 +32,13 @@ def get_cells_from_xml(xml_content: str) -> list[dict]:
                     'target': cell.getAttribute('target'),
                 }
                 
+                # Get bound_nodes if available
+                bound_nodes_attr = cell.getAttribute('bound_nodes')
+                if bound_nodes_attr:
+                    cell_info['bound_nodes'] = bound_nodes_attr.split(',')
+                else:
+                    cell_info['bound_nodes'] = []
+                
                 # Get geometry if available
                 geom = cell.getElementsByTagName('mxGeometry')
                 if geom:

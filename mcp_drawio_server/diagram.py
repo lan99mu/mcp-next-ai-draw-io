@@ -91,9 +91,16 @@ class Diagram:
         # Add shapes
         for shape in self.shapes.values():
             style = shape.style or self._get_default_style(shape.shape_type)
+            
+            # Add bound_nodes as a custom attribute if present
+            bound_attr = ""
+            if shape.bound_nodes:
+                # Encode bound nodes as a comma-separated list in a custom attribute
+                bound_attr = f' bound_nodes="{",".join(shape.bound_nodes)}"'
+            
             xml_parts.append(
                 f'        <mxCell id="{shape.id}" value="{self._escape_xml(shape.label)}" '
-                f'style="{style}" vertex="1" parent="1">'
+                f'style="{style}" vertex="1" parent="1"{bound_attr}>'
             )
             xml_parts.append(
                 f'          <mxGeometry x="{shape.x}" y="{shape.y}" '

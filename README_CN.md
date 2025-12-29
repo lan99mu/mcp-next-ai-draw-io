@@ -48,6 +48,8 @@
 - 🏗️ **创建** - 从头开始以编程方式构建图表
 - 🔷 **形状类型** - 支持多种预定义形状
 - 🎨 **样式** - 自定义 Draw.io 样式字符串以实现高级控制
+- 📍 **坐标系统** - 获取详细的位置信息（坐标、中心点、边界框）以便更好地进行空间推理
+- 🔗 **节点绑定** - 将节点绑定在一起，作为一组移动
 
 ### 相比基础版本的改进
 
@@ -183,6 +185,15 @@ Copilot 将：
 | `add_shape` | 添加新形状 | `label`, `x`, `y`, `shape_type` 等 |
 | `add_connection` | 添加连接（支持标签位置调整）| `source_id`, `target_id`, `label`, `label_position`, `label_offset_x`, `label_offset_y`, `label_background_color` 等 |
 
+### 节点绑定工具
+
+| 工具 | 描述 | 关键参数 |
+|------|------|----------|
+| `bind_nodes` | 将多个节点绑定在一起作为一组移动 | `node_ids`（节点 ID 列表）|
+| `unbind_nodes` | 将节点从其组中解除绑定 | `node_ids`（节点 ID 列表）|
+| `get_bound_nodes` | 获取与特定节点绑定的节点 | `node_id` |
+| `move_shape` | 将形状（及其绑定的节点）移动到新位置 | `shape_id`, `new_x`, `new_y` |
+
 ### 连接标签位置
 
 `add_connection` 工具现在支持调整连接线文字（标签）的位置：
@@ -211,6 +222,71 @@ add_connection(source_id, target_id,
     label_offset_y=5,
     label_background_color="#e3f2fd")
 ```
+
+### 坐标系统
+
+坐标系统功能为所有形状提供详细的位置信息，帮助大语言模型更好地理解空间关系：
+
+**增强的 `list_cells` 输出包括：**
+- 左上角位置：`(x, y)`
+- 尺寸：`宽度 x 高度`
+- 中心点：`(center_x, center_y)`
+- 边界框：`(x, y) 到 (x+width, y+height)`
+
+**增强的 `get_cell` 输出包括：**
+- 位置（左上角）
+- 尺寸大小
+- 计算的中心点
+- 完整的边界框坐标
+- 绑定的节点（如果有）
+
+**示例：**
+```
+用户："显示我的图表结构"
+
+Copilot 将调用 list_cells 并看到如下输出：
+- ID: shape_1, Type: Shape, Label: '开始', at (100, 50), size (120x60), center (160, 80)
+- ID: shape_2, Type: Shape, Label: '处理', at (100, 150), size (120x60), center (160, 180)
+
+这帮助大模型理解 shape_2 在 shape_1 正下方（相同的 x 坐标，不同的 y 坐标）。
+```
+
+### 节点绑定
+
+节点绑定允许您将多个节点组合在一起，使它们作为一个单元移动：
+
+**基本工作流程：**
+1. 使用 `bind_nodes` 将多个节点绑定在一起
+2. 使用 `move_shape` 移动一个节点 - 所有绑定的节点一起移动
+3. 使用 `get_bound_nodes` 检查哪些节点绑定在一起
+4. 使用 `unbind_nodes` 打破绑定关系
+
+**示例：**
+```python
+# 将三个节点绑定在一起形成一组
+bind_nodes(node_ids=["shape_1", "shape_2", "shape_3"])
+
+# 移动 shape_1 - 三个节点将一起移动
+move_shape(shape_id="shape_1", new_x=200, new_y=100)
+
+# 检查什么与 shape_1 绑定
+get_bound_nodes(node_id="shape_1")
+# 返回："节点 'shape_1' 绑定到 2 个节点：shape_2, shape_3"
+
+# 解除绑定特定节点
+unbind_nodes(node_ids=["shape_2"])
+# 现在 shape_1 和 shape_3 仍然绑定，但 shape_2 是独立的
+
+# 解除所有节点的绑定
+unbind_nodes(node_ids=["shape_1", "shape_3"])
+```
+
+**使用场景：**
+- 将相关组件一起移动（例如，微服务及其数据库）
+- 重新组织图表时保持布局关系
+- 创建应该保持在一起的复合元素
+
+**注意：** 绑定关系使用自定义属性保存在 .drawio XML 格式中。
 
 ### 创建工具
 
