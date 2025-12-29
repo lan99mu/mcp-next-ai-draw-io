@@ -11,7 +11,21 @@ from .models import Shape, Connection
 
 
 def _format_number(value: float) -> str:
-    """Format a number for XML output, using int format if it's a whole number"""
+    """
+    Format a number for XML output, using int format if it's a whole number.
+    
+    Args:
+        value: A numeric value (int or float)
+        
+    Returns:
+        String representation without decimal point for whole numbers,
+        otherwise standard float representation
+        
+    Examples:
+        _format_number(250.0) -> "250"
+        _format_number(250.5) -> "250.5"
+        _format_number(250) -> "250"
+    """
     if isinstance(value, (int, float)) and value == int(value):
         return str(int(value))
     return str(value)

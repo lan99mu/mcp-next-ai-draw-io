@@ -90,9 +90,9 @@ def get_cells_from_xml(xml_content: str) -> list[dict]:
                                 y = point.getAttribute('y')
                                 if x and y:
                                     cell_info['target_point'] = [x, y]
-                            elif point_as == 'offset':
-                                # Label offset (already handled by label_offset_x/y in Connection)
-                                pass
+                            # Note: offset points (as="offset") are label offsets, which are
+                            # handled separately through label_offset_x/y parameters in the
+                            # Connection model and server tool. No additional parsing needed here.
                 
                 cells.append(cell_info)
         
