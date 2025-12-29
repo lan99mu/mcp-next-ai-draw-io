@@ -50,6 +50,8 @@ This MCP server follows the principle of **tool encapsulation** rather than appl
 - 🏗️ **Create** - Build diagrams programmatically from scratch
 - 🔷 **Shape Types** - Support for multiple predefined shapes
 - 🎨 **Styling** - Custom Draw.io style strings for advanced control
+- 📍 **Coordinate System** - Get detailed position information (coordinates, center, bounding box) for better spatial reasoning
+- 🔗 **Node Binding** - Bind nodes together to move them as a group
 
 ### Key Improvements Over Basic Version / 相比基础版本的改进
 
@@ -187,6 +189,15 @@ Copilot will:
 | `add_shape` | Add new shape | `label`, `x`, `y`, `shape_type`, etc. |
 | `add_connection` | Add connection (supports label positioning) | `source_id`, `target_id`, `label`, `label_position`, `label_offset_x`, `label_offset_y`, `label_background_color`, etc. |
 
+### Node Binding Tools / 节点绑定工具
+
+| Tool | Description | Key Parameters |
+|------|-------------|----------------|
+| `bind_nodes` | Bind multiple nodes together to move as a group | `node_ids` (list of node IDs) |
+| `unbind_nodes` | Unbind nodes from their group | `node_ids` (list of node IDs) |
+| `get_bound_nodes` | Get nodes bound to a specific node | `node_id` |
+| `move_shape` | Move a shape (and its bound nodes) to a new position | `shape_id`, `new_x`, `new_y` |
+
 ### Connection Label Positioning / 连接标签位置
 
 The `add_connection` tool now supports adjusting the position of connection line text (labels):
@@ -215,6 +226,71 @@ add_connection(source_id, target_id,
     label_offset_y=5,
     label_background_color="#e3f2fd")
 ```
+
+### Coordinate System / 坐标系统
+
+The coordinate system feature provides detailed position information for all shapes, helping LLMs better understand spatial relationships:
+
+**Enhanced `list_cells` output includes:**
+- Top-left position: `(x, y)`
+- Size: `width x height`
+- Center point: `(center_x, center_y)`
+- Bounding box: `(x, y) to (x+width, y+height)`
+
+**Enhanced `get_cell` output includes:**
+- Position (top-left)
+- Size dimensions
+- Calculated center point
+- Full bounding box coordinates
+- Bound nodes (if any)
+
+**Example:**
+```
+User: "Show me the structure of my diagram"
+
+Copilot will call list_cells and see output like:
+- ID: shape_1, Type: Shape, Label: 'Start', at (100, 50), size (120x60), center (160, 80)
+- ID: shape_2, Type: Shape, Label: 'Process', at (100, 150), size (120x60), center (160, 180)
+
+This helps the LLM understand that shape_2 is directly below shape_1 (same x-coordinate, different y).
+```
+
+### Node Binding / 节点绑定
+
+Node binding allows you to group multiple nodes together so they move as a unit:
+
+**Basic workflow:**
+1. Use `bind_nodes` to bind multiple nodes together
+2. Use `move_shape` to move one node - all bound nodes move together
+3. Use `get_bound_nodes` to check which nodes are bound together
+4. Use `unbind_nodes` to break the binding relationship
+
+**Examples:**
+```python
+# Bind three nodes together to form a group
+bind_nodes(node_ids=["shape_1", "shape_2", "shape_3"])
+
+# Move shape_1 - all three nodes will move together
+move_shape(shape_id="shape_1", new_x=200, new_y=100)
+
+# Check what's bound to shape_1
+get_bound_nodes(node_id="shape_1")
+# Returns: "Node 'shape_1' is bound to 2 node(s): shape_2, shape_3"
+
+# Unbind a specific node
+unbind_nodes(node_ids=["shape_2"])
+# Now shape_1 and shape_3 are still bound, but shape_2 is independent
+
+# Unbind all nodes
+unbind_nodes(node_ids=["shape_1", "shape_3"])
+```
+
+**Use cases:**
+- Moving related components together (e.g., a microservice and its database)
+- Maintaining layout relationships when reorganizing diagrams
+- Creating composite elements that should stay together
+
+**Note:** Bindings are preserved in the .drawio XML format using custom attributes.
 
 ### Creation Tools / 创建工具
 
