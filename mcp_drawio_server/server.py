@@ -291,6 +291,72 @@ async def list_tools() -> list[Tool]:
             }
         ),
         Tool(
+            name="bind_nodes",
+            description="Bind multiple nodes together so they move as a group. When you move one node in a bound group, all bound nodes will move together by the same offset.",
+            inputSchema={
+                "type": "object",
+                "properties": {
+                    "node_ids": {
+                        "type": "array",
+                        "items": {"type": "string"},
+                        "description": "List of node IDs to bind together (minimum 2 nodes)"
+                    }
+                },
+                "required": ["node_ids"]
+            }
+        ),
+        Tool(
+            name="unbind_nodes",
+            description="Remove nodes from their binding group. The specified nodes will no longer move together with other nodes.",
+            inputSchema={
+                "type": "object",
+                "properties": {
+                    "node_ids": {
+                        "type": "array",
+                        "items": {"type": "string"},
+                        "description": "List of node IDs to unbind"
+                    }
+                },
+                "required": ["node_ids"]
+            }
+        ),
+        Tool(
+            name="get_bound_nodes",
+            description="Get the list of nodes that are bound to a specific node.",
+            inputSchema={
+                "type": "object",
+                "properties": {
+                    "node_id": {
+                        "type": "string",
+                        "description": "The node ID to query bindings for"
+                    }
+                },
+                "required": ["node_id"]
+            }
+        ),
+        Tool(
+            name="move_shape",
+            description="Move a shape to a new position. If the shape is bound to other nodes, all bound nodes will also move by the same offset.",
+            inputSchema={
+                "type": "object",
+                "properties": {
+                    "shape_id": {
+                        "type": "string",
+                        "description": "The ID of the shape to move"
+                    },
+                    "new_x": {
+                        "type": "number",
+                        "description": "New X coordinate for the shape"
+                    },
+                    "new_y": {
+                        "type": "number",
+                        "description": "New Y coordinate for the shape"
+                    }
+                },
+                "required": ["shape_id", "new_x", "new_y"]
+            }
+        ),
+        Tool(
             name="list_shapes",
             description="List all shapes in the diagram (deprecated: use list_cells instead for more complete information).",
             inputSchema={
@@ -429,16 +495,28 @@ async def call_tool(name: str, arguments: Any) -> list[TextContent]:
                 text="No cells in the diagram yet."
             )]
         
-        # Format cells list
+        # Format cells list with coordinate system information
         cells_list = []
         for cell in cells:
             cell_type = "Shape" if cell['vertex'] else ("Connection" if cell['edge'] else "Unknown")
             label = cell['value'] or "(no label)"
-            pos = f"at ({cell.get('x', '?')}, {cell.get('y', '?')})" if cell['vertex'] else ""
-            if cell['edge']:
-                pos = f"from {cell['source']} to {cell['target']}"
             
-            cells_list.append(f"- ID: {cell['id']}, Type: {cell_type}, Label: {label} {pos}")
+            if cell['vertex']:
+                # For shapes, show detailed coordinate information
+                x = cell.get('x', 0)
+                y = cell.get('y', 0)
+                width = cell.get('width', 0)
+                height = cell.get('height', 0)
+                # Calculate center point
+                center_x = x + width / 2
+                center_y = y + height / 2
+                pos = f"at ({x}, {y}), size ({width}x{height}), center ({center_x}, {center_y})"
+            elif cell['edge']:
+                pos = f"from {cell['source']} to {cell['target']}"
+            else:
+                pos = ""
+            
+            cells_list.append(f"- ID: {cell['id']}, Type: {cell_type}, Label: '{label}', {pos}")
         
         return [TextContent(
             type="text",
@@ -473,8 +551,21 @@ async def call_tool(name: str, arguments: Any) -> list[TextContent]:
         cell_info += f"Label: {cell['value'] or '(no label)'}\n"
         cell_info += f"Style: {cell['style'] or '(default)'}\n"
         if cell['vertex']:
-            cell_info += f"Position: ({cell.get('x', 'N/A')}, {cell.get('y', 'N/A')})\n"
-            cell_info += f"Size: {cell.get('width', 'N/A')} x {cell.get('height', 'N/A')}\n"
+            x = float(cell.get('x', 0))
+            y = float(cell.get('y', 0))
+            width = float(cell.get('width', 0))
+            height = float(cell.get('height', 0))
+            center_x = x + width / 2
+            center_y = y + height / 2
+            cell_info += f"Position (top-left): ({x}, {y})\n"
+            cell_info += f"Size: {width} x {height}\n"
+            cell_info += f"Center: ({center_x}, {center_y})\n"
+            cell_info += f"Bounding box: ({x}, {y}) to ({x + width}, {y + height})\n"
+            
+            # Show bound nodes if any
+            bound_nodes = cell.get('bound_nodes', [])
+            if bound_nodes:
+                cell_info += f"Bound to {len(bound_nodes)} node(s): {', '.join(bound_nodes)}\n"
         if cell['edge']:
             cell_info += f"Source: {cell['source']}\n"
             cell_info += f"Target: {cell['target']}\n"
@@ -584,6 +675,142 @@ async def call_tool(name: str, arguments: Any) -> list[TextContent]:
     elif name == "list_shapes":
         # Deprecated - redirect to list_cells
         return await call_tool("list_cells", {})
+    
+    elif name == "bind_nodes":
+        diagram = get_or_create_diagram()
+        node_ids = arguments["node_ids"]
+        
+        if len(node_ids) < 2:
+            return [TextContent(
+                type="text",
+                text="Error: At least 2 nodes are required to create a binding."
+            )]
+        
+        # Verify all nodes exist
+        missing_nodes = [nid for nid in node_ids if nid not in diagram.shapes]
+        if missing_nodes:
+            return [TextContent(
+                type="text",
+                text=f"Error: The following node IDs were not found: {', '.join(missing_nodes)}"
+            )]
+        
+        # Bind the nodes together - each node keeps track of all other nodes in the group
+        for node_id in node_ids:
+            # Get the other nodes in the group (all except this one)
+            other_nodes = [nid for nid in node_ids if nid != node_id]
+            # Update the bound_nodes list to include all other nodes in the group
+            diagram.shapes[node_id].bound_nodes = list(set(diagram.shapes[node_id].bound_nodes + other_nodes))
+        
+        # Update current_xml if we're working with XML
+        if current_xml:
+            current_xml = diagram.to_drawio_xml()
+        
+        return [TextContent(
+            type="text",
+            text=f"Successfully bound {len(node_ids)} nodes together: {', '.join(node_ids)}\n\nThese nodes will now move together when any one of them is moved."
+        )]
+    
+    elif name == "unbind_nodes":
+        diagram = get_or_create_diagram()
+        node_ids = arguments["node_ids"]
+        
+        # Verify all nodes exist
+        missing_nodes = [nid for nid in node_ids if nid not in diagram.shapes]
+        if missing_nodes:
+            return [TextContent(
+                type="text",
+                text=f"Error: The following node IDs were not found: {', '.join(missing_nodes)}"
+            )]
+        
+        # Remove bindings for specified nodes
+        for node_id in node_ids:
+            bound_to = diagram.shapes[node_id].bound_nodes.copy()
+            diagram.shapes[node_id].bound_nodes = []
+            
+            # Also remove this node from other nodes' binding lists
+            for other_id in bound_to:
+                if other_id in diagram.shapes:
+                    if node_id in diagram.shapes[other_id].bound_nodes:
+                        diagram.shapes[other_id].bound_nodes.remove(node_id)
+        
+        # Update current_xml if we're working with XML
+        if current_xml:
+            current_xml = diagram.to_drawio_xml()
+        
+        return [TextContent(
+            type="text",
+            text=f"Successfully unbound {len(node_ids)} nodes: {', '.join(node_ids)}"
+        )]
+    
+    elif name == "get_bound_nodes":
+        diagram = get_or_create_diagram()
+        node_id = arguments["node_id"]
+        
+        if node_id not in diagram.shapes:
+            return [TextContent(
+                type="text",
+                text=f"Error: Node ID '{node_id}' not found."
+            )]
+        
+        bound_nodes = diagram.shapes[node_id].bound_nodes
+        
+        if not bound_nodes:
+            return [TextContent(
+                type="text",
+                text=f"Node '{node_id}' is not bound to any other nodes."
+            )]
+        
+        return [TextContent(
+            type="text",
+            text=f"Node '{node_id}' is bound to {len(bound_nodes)} node(s):\n\n" + "\n".join(f"- {nid}" for nid in bound_nodes)
+        )]
+    
+    elif name == "move_shape":
+        diagram = get_or_create_diagram()
+        shape_id = arguments["shape_id"]
+        new_x = arguments["new_x"]
+        new_y = arguments["new_y"]
+        
+        if shape_id not in diagram.shapes:
+            return [TextContent(
+                type="text",
+                text=f"Error: Shape ID '{shape_id}' not found."
+            )]
+        
+        shape = diagram.shapes[shape_id]
+        old_x = shape.x
+        old_y = shape.y
+        
+        # Calculate offset
+        offset_x = new_x - old_x
+        offset_y = new_y - old_y
+        
+        # Move the shape
+        shape.x = new_x
+        shape.y = new_y
+        
+        # Move all bound nodes by the same offset
+        moved_nodes = [shape_id]
+        for bound_id in shape.bound_nodes:
+            if bound_id in diagram.shapes:
+                diagram.shapes[bound_id].x += offset_x
+                diagram.shapes[bound_id].y += offset_y
+                moved_nodes.append(bound_id)
+        
+        # Update current_xml if we're working with XML
+        if current_xml:
+            current_xml = diagram.to_drawio_xml()
+        
+        if len(moved_nodes) > 1:
+            return [TextContent(
+                type="text",
+                text=f"Moved shape '{shape_id}' from ({old_x}, {old_y}) to ({new_x}, {new_y}).\n\nAlso moved {len(moved_nodes) - 1} bound node(s) by offset ({offset_x}, {offset_y}):\n" + "\n".join(f"- {nid}" for nid in moved_nodes[1:])
+            )]
+        else:
+            return [TextContent(
+                type="text",
+                text=f"Moved shape '{shape_id}' from ({old_x}, {old_y}) to ({new_x}, {new_y})."
+            )]
     
     else:
         return [TextContent(
