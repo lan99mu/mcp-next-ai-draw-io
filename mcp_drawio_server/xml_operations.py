@@ -47,6 +47,52 @@ def get_cells_from_xml(xml_content: str) -> list[dict]:
                     cell_info['y'] = g.getAttribute('y')
                     cell_info['width'] = g.getAttribute('width')
                     cell_info['height'] = g.getAttribute('height')
+                    
+                    # Get entry/exit points for edges
+                    if cell_info['edge']:
+                        entry_x = g.getAttribute('entryX')
+                        entry_y = g.getAttribute('entryY')
+                        exit_x = g.getAttribute('exitX')
+                        exit_y = g.getAttribute('exitY')
+                        
+                        if entry_x:
+                            cell_info['entry_x'] = entry_x
+                        if entry_y:
+                            cell_info['entry_y'] = entry_y
+                        if exit_x:
+                            cell_info['exit_x'] = exit_x
+                        if exit_y:
+                            cell_info['exit_y'] = exit_y
+                        
+                        # Get waypoints (Array of mxPoint elements)
+                        arrays = g.getElementsByTagName('Array')
+                        for arr in arrays:
+                            if arr.getAttribute('as') == 'points':
+                                waypoints = []
+                                for point in arr.getElementsByTagName('mxPoint'):
+                                    x = point.getAttribute('x')
+                                    y = point.getAttribute('y')
+                                    if x and y:
+                                        waypoints.append([x, y])
+                                if waypoints:
+                                    cell_info['waypoints'] = waypoints
+                        
+                        # Get source/target points
+                        for point in g.getElementsByTagName('mxPoint'):
+                            point_as = point.getAttribute('as')
+                            if point_as == 'sourcePoint':
+                                x = point.getAttribute('x')
+                                y = point.getAttribute('y')
+                                if x and y:
+                                    cell_info['source_point'] = [x, y]
+                            elif point_as == 'targetPoint':
+                                x = point.getAttribute('x')
+                                y = point.getAttribute('y')
+                                if x and y:
+                                    cell_info['target_point'] = [x, y]
+                            elif point_as == 'offset':
+                                # Label offset (already handled by label_offset_x/y in Connection)
+                                pass
                 
                 cells.append(cell_info)
         

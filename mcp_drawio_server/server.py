@@ -260,7 +260,7 @@ async def list_tools() -> list[Tool]:
         ),
         Tool(
             name="add_connection",
-            description="Add a connection/edge between two shapes in the diagram. Supports label positioning. Returns the ID of the created connection.",
+            description="Add a connection/edge between two shapes in the diagram. Supports label positioning, entry/exit points, and waypoint routing. Returns the ID of the created connection.",
             inputSchema={
                 "type": "object",
                 "properties": {
@@ -304,6 +304,46 @@ async def list_tools() -> list[Tool]:
                     "label_background_color": {
                         "type": "string",
                         "description": "Background color for the label, e.g., '#ffffff' or 'none' (optional)"
+                    },
+                    "entry_x": {
+                        "type": "number",
+                        "description": "Entry point X coordinate on target shape (normalized 0-1, where 0=left, 0.5=center, 1=right) (optional)"
+                    },
+                    "entry_y": {
+                        "type": "number",
+                        "description": "Entry point Y coordinate on target shape (normalized 0-1, where 0=top, 0.5=center, 1=bottom) (optional)"
+                    },
+                    "exit_x": {
+                        "type": "number",
+                        "description": "Exit point X coordinate on source shape (normalized 0-1, where 0=left, 0.5=center, 1=right) (optional)"
+                    },
+                    "exit_y": {
+                        "type": "number",
+                        "description": "Exit point Y coordinate on source shape (normalized 0-1, where 0=top, 0.5=center, 1=bottom) (optional)"
+                    },
+                    "waypoints": {
+                        "type": "array",
+                        "items": {
+                            "type": "array",
+                            "items": {"type": "number"},
+                            "minItems": 2,
+                            "maxItems": 2
+                        },
+                        "description": "List of intermediate routing points as [x, y] coordinates in absolute pixels (optional)"
+                    },
+                    "source_point": {
+                        "type": "array",
+                        "items": {"type": "number"},
+                        "minItems": 2,
+                        "maxItems": 2,
+                        "description": "Explicit source point as [x, y] coordinates in absolute pixels (optional, overrides exit point)"
+                    },
+                    "target_point": {
+                        "type": "array",
+                        "items": {"type": "number"},
+                        "minItems": 2,
+                        "maxItems": 2,
+                        "description": "Explicit target point as [x, y] coordinates in absolute pixels (optional, overrides entry point)"
                     }
                 },
                 "required": ["source_id", "target_id"]
@@ -666,6 +706,20 @@ async def call_tool(name: str, arguments: Any) -> list[TextContent]:
     elif name == "add_connection":
         diagram = get_or_create_diagram()
         try:
+            # Convert waypoints from list of lists to list of tuples
+            waypoints = arguments.get("waypoints")
+            if waypoints:
+                waypoints = [tuple(wp) for wp in waypoints]
+            
+            # Convert source/target points from lists to tuples
+            source_point = arguments.get("source_point")
+            if source_point:
+                source_point = tuple(source_point)
+            
+            target_point = arguments.get("target_point")
+            if target_point:
+                target_point = tuple(target_point)
+            
             conn_id = diagram.add_connection(
                 source_id=arguments["source_id"],
                 target_id=arguments["target_id"],
@@ -675,7 +729,14 @@ async def call_tool(name: str, arguments: Any) -> list[TextContent]:
                 label_position=arguments.get("label_position"),
                 label_offset_x=arguments.get("label_offset_x"),
                 label_offset_y=arguments.get("label_offset_y"),
-                label_background_color=arguments.get("label_background_color")
+                label_background_color=arguments.get("label_background_color"),
+                entry_x=arguments.get("entry_x"),
+                entry_y=arguments.get("entry_y"),
+                exit_x=arguments.get("exit_x"),
+                exit_y=arguments.get("exit_y"),
+                waypoints=waypoints,
+                source_point=source_point,
+                target_point=target_point
             )
             # Update current_xml if we're working with XML
             if current_xml:
