@@ -43,6 +43,25 @@ def get_or_create_diagram() -> Diagram:
     return current_diagram
 
 
+def safe_float(value, default=0.0) -> float:
+    """Safely convert a value to float, returning default if conversion fails"""
+    if value is None or value == '':
+        return default
+    try:
+        return float(value)
+    except (ValueError, TypeError):
+        return default
+
+
+def bind_nodes_helper(diagram: Diagram, node_ids: list[str]) -> None:
+    """Helper function to bind multiple nodes together"""
+    for node_id in node_ids:
+        # Get the other nodes in the group (all except this one)
+        other_nodes = [nid for nid in node_ids if nid != node_id]
+        # Update the bound_nodes list to include all other nodes in the group
+        diagram.shapes[node_id].bound_nodes = list(set(diagram.shapes[node_id].bound_nodes + other_nodes))
+
+
 # Initialize MCP server
 app = Server("mcp-drawio-server")
 
@@ -503,10 +522,10 @@ async def call_tool(name: str, arguments: Any) -> list[TextContent]:
             
             if cell['vertex']:
                 # For shapes, show detailed coordinate information
-                x = cell.get('x', 0)
-                y = cell.get('y', 0)
-                width = cell.get('width', 0)
-                height = cell.get('height', 0)
+                x = safe_float(cell.get('x'))
+                y = safe_float(cell.get('y'))
+                width = safe_float(cell.get('width'))
+                height = safe_float(cell.get('height'))
                 # Calculate center point
                 center_x = x + width / 2
                 center_y = y + height / 2
@@ -551,10 +570,10 @@ async def call_tool(name: str, arguments: Any) -> list[TextContent]:
         cell_info += f"Label: {cell['value'] or '(no label)'}\n"
         cell_info += f"Style: {cell['style'] or '(default)'}\n"
         if cell['vertex']:
-            x = float(cell.get('x', 0))
-            y = float(cell.get('y', 0))
-            width = float(cell.get('width', 0))
-            height = float(cell.get('height', 0))
+            x = safe_float(cell.get('x'))
+            y = safe_float(cell.get('y'))
+            width = safe_float(cell.get('width'))
+            height = safe_float(cell.get('height'))
             center_x = x + width / 2
             center_y = y + height / 2
             cell_info += f"Position (top-left): ({x}, {y})\n"
@@ -694,12 +713,8 @@ async def call_tool(name: str, arguments: Any) -> list[TextContent]:
                 text=f"Error: The following node IDs were not found: {', '.join(missing_nodes)}"
             )]
         
-        # Bind the nodes together - each node keeps track of all other nodes in the group
-        for node_id in node_ids:
-            # Get the other nodes in the group (all except this one)
-            other_nodes = [nid for nid in node_ids if nid != node_id]
-            # Update the bound_nodes list to include all other nodes in the group
-            diagram.shapes[node_id].bound_nodes = list(set(diagram.shapes[node_id].bound_nodes + other_nodes))
+        # Bind the nodes together using helper function
+        bind_nodes_helper(diagram, node_ids)
         
         # Update current_xml if we're working with XML
         if current_xml:
