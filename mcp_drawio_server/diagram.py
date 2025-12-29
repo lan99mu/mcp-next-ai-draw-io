@@ -10,6 +10,27 @@ from datetime import datetime, timezone
 from .models import Shape, Connection
 
 
+def _format_number(value: float) -> str:
+    """
+    Format a number for XML output, using int format if it's a whole number.
+    
+    Args:
+        value: A numeric value (int or float)
+        
+    Returns:
+        String representation without decimal point for whole numbers,
+        otherwise standard float representation
+        
+    Examples:
+        _format_number(250.0) -> "250"
+        _format_number(250.5) -> "250.5"
+        _format_number(250) -> "250"
+    """
+    if isinstance(value, (int, float)) and value == int(value):
+        return str(int(value))
+    return str(value)
+
+
 class Diagram:
     """Manages a Draw.io diagram structure"""
     
@@ -55,7 +76,14 @@ class Diagram:
         label_position: Optional[str] = None,
         label_offset_x: Optional[float] = None,
         label_offset_y: Optional[float] = None,
-        label_background_color: Optional[str] = None
+        label_background_color: Optional[str] = None,
+        entry_x: Optional[float] = None,
+        entry_y: Optional[float] = None,
+        exit_x: Optional[float] = None,
+        exit_y: Optional[float] = None,
+        waypoints: Optional[list[tuple[float, float]]] = None,
+        source_point: Optional[tuple[float, float]] = None,
+        target_point: Optional[tuple[float, float]] = None
     ) -> str:
         """Add a connection between two shapes"""
         if source_id not in self.shapes or target_id not in self.shapes:
@@ -74,7 +102,14 @@ class Diagram:
             label_position=label_position,
             label_offset_x=label_offset_x,
             label_offset_y=label_offset_y,
-            label_background_color=label_background_color
+            label_background_color=label_background_color,
+            entry_x=entry_x,
+            entry_y=entry_y,
+            exit_x=exit_x,
+            exit_y=exit_y,
+            waypoints=waypoints or [],
+            source_point=source_point,
+            target_point=target_point
         )
         return conn_id
     
@@ -129,16 +164,44 @@ class Diagram:
                 f'style="{style}" edge="1" parent="1" source="{conn.source_id}" target="{conn.target_id}">'
             )
             
-            # Add geometry with label offset if specified
+            # Build geometry with entry/exit points, waypoints, and offsets
+            geometry_attrs = ['relative="1"', 'as="geometry"']
+            
+            # Add entry/exit points as attributes if specified
+            if conn.entry_x is not None:
+                geometry_attrs.append(f'entryX="{conn.entry_x}"')
+            if conn.entry_y is not None:
+                geometry_attrs.append(f'entryY="{conn.entry_y}"')
+            if conn.exit_x is not None:
+                geometry_attrs.append(f'exitX="{conn.exit_x}"')
+            if conn.exit_y is not None:
+                geometry_attrs.append(f'exitY="{conn.exit_y}"')
+            
+            geometry_line = f'          <mxGeometry {" ".join(geometry_attrs)}>'
+            xml_parts.append(geometry_line)
+            
+            # Add source point if specified
+            if conn.source_point is not None:
+                xml_parts.append(f'            <mxPoint x="{_format_number(conn.source_point[0])}" y="{_format_number(conn.source_point[1])}" as="sourcePoint"/>')
+            
+            # Add target point if specified
+            if conn.target_point is not None:
+                xml_parts.append(f'            <mxPoint x="{_format_number(conn.target_point[0])}" y="{_format_number(conn.target_point[1])}" as="targetPoint"/>')
+            
+            # Add waypoints if specified
+            if conn.waypoints:
+                xml_parts.append('            <Array as="points">')
+                for waypoint in conn.waypoints:
+                    xml_parts.append(f'              <mxPoint x="{_format_number(waypoint[0])}" y="{_format_number(waypoint[1])}"/>')
+                xml_parts.append('            </Array>')
+            
+            # Add label offset if specified
             if conn.label_offset_x is not None or conn.label_offset_y is not None:
                 offset_x = conn.label_offset_x if conn.label_offset_x is not None else 0
                 offset_y = conn.label_offset_y if conn.label_offset_y is not None else 0
-                xml_parts.append(f'          <mxGeometry relative="1" as="geometry">')
-                xml_parts.append(f'            <mxPoint x="{offset_x}" y="{offset_y}" as="offset"/>')
-                xml_parts.append('          </mxGeometry>')
-            else:
-                xml_parts.append('          <mxGeometry relative="1" as="geometry"/>')
+                xml_parts.append(f'            <mxPoint x="{_format_number(offset_x)}" y="{_format_number(offset_y)}" as="offset"/>')
             
+            xml_parts.append('          </mxGeometry>')
             xml_parts.append('        </mxCell>')
         
         xml_parts.append('      </root>')

@@ -37,3 +37,11 @@ class Connection(DiagramElement):
     label_offset_x: Optional[float] = None  # X offset for label position
     label_offset_y: Optional[float] = None  # Y offset for label position
     label_background_color: Optional[str] = None  # Background color for label
+    # Connection routing and positioning
+    entry_x: Optional[float] = None  # Entry point X (normalized 0-1, relative to target shape)
+    entry_y: Optional[float] = None  # Entry point Y (normalized 0-1, relative to target shape)
+    exit_x: Optional[float] = None  # Exit point X (normalized 0-1, relative to source shape)
+    exit_y: Optional[float] = None  # Exit point Y (normalized 0-1, relative to source shape)
+    waypoints: list[tuple[float, float]] = Field(default_factory=list)  # List of (x, y) intermediate points
+    source_point: Optional[tuple[float, float]] = None  # Explicit source point (x, y)
+    target_point: Optional[tuple[float, float]] = None  # Explicit target point (x, y)
