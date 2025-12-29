@@ -93,7 +93,8 @@ pip install -r requirements.txt
     "drawio": {
       "type": "stdio",
       "command": "python",
-      "args": ["/path/to/mcp-next-ai-draw-io/mcp_drawio_server.py"]
+      "args": ["-m", "mcp_drawio_server"],
+      "cwd": "/path/to/mcp-next-ai-draw-io"
     }
   },
   "inputs": []
@@ -111,7 +112,8 @@ pip install -r requirements.txt
   "mcpServers": {
     "drawio": {
       "command": "python",
-      "args": ["/path/to/mcp-next-ai-draw-io/mcp_drawio_server.py"]
+      "args": ["-m", "mcp_drawio_server"],
+      "cwd": "/path/to/mcp-next-ai-draw-io"
     }
   }
 }
