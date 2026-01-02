@@ -4,6 +4,9 @@ Verification script for connection positioning feature.
 Demonstrates all available position control parameters.
 """
 
+import sys
+import tempfile
+from pathlib import Path
 from mcp_drawio_server.diagram import Diagram
 
 def main():
@@ -110,8 +113,8 @@ def main():
     
     # Save to file
     print("\n8. Saving diagram...")
-    from pathlib import Path
-    output_path = Path("/tmp/connection_position_verification.drawio")
+    temp_dir = Path(tempfile.gettempdir())
+    output_path = temp_dir / "connection_position_verification.drawio"
     output_path.write_text(xml, encoding='utf-8')
     print(f"   ✓ Saved to: {output_path}")
     print(f"   ✓ File size: {len(xml)} bytes")
@@ -135,4 +138,4 @@ def main():
 
 if __name__ == "__main__":
     success = main()
-    exit(0 if success else 1)
+    sys.exit(0 if success else 1)
