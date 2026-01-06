@@ -240,12 +240,13 @@ async def list_tools() -> list[Tool]:
                     },
                     "shape_type": {
                         "type": "string",
-                        "description": "Type of shape (default: rectangle). Includes basic shapes (rectangle, ellipse, diamond, parallelogram, hexagon, cylinder, cloud), activity diagram shapes (activity_start, activity_end, activity_action, activity_decision, activity_fork, activity_join, activity_send_signal, activity_receive_signal, activity_note), and swimlane shapes (swimlane_pool, swimlane_h, swimlane_v, container).",
+                        "description": "Type of shape (default: rectangle). Includes basic shapes (rectangle, ellipse, diamond, parallelogram, hexagon, cylinder, cloud), activity diagram shapes (activity_start, activity_end, activity_action, activity_decision, activity_fork, activity_join, activity_send_signal, activity_receive_signal, activity_note), swimlane shapes (swimlane_pool, swimlane_h, swimlane_v, container), and UML class diagram shapes (uml_class, uml_interface, uml_abstract_class, uml_enum, uml_package, uml_note).",
                         "enum": [
                             "rectangle", "ellipse", "diamond", "parallelogram", "hexagon", "cylinder", "cloud",
                             "activity_start", "activity_end", "activity_action", "activity_decision", 
                             "activity_fork", "activity_join", "activity_send_signal", "activity_receive_signal", "activity_note",
-                            "swimlane_pool", "swimlane_h", "swimlane_v", "container"
+                            "swimlane_pool", "swimlane_h", "swimlane_v", "container",
+                            "uml_class", "uml_interface", "uml_abstract_class", "uml_enum", "uml_package", "uml_note"
                         ],
                         "default": "rectangle"
                     },
