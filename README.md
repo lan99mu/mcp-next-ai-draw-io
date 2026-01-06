@@ -400,6 +400,15 @@ unbind_nodes(node_ids=["shape_1", "shape_3"])
 - `swimlane_v` - Vertical swimlane
 - `container` - Generic container for grouping elements
 
+### UML Class Diagram Shapes / UML类图形状
+
+- `uml_class` - UML class with compartments for attributes and methods
+- `uml_interface` - Interface shape (italic style)
+- `uml_abstract_class` - Abstract class shape (italic style)
+- `uml_enum` - Enumeration shape
+- `uml_package` - Package/namespace shape
+- `uml_note` - UML note/comment shape
+
 Custom shapes can be used via the `style` parameter with Draw.io style strings.
 
 ## Testing / 测试

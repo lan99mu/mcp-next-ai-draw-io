@@ -396,7 +396,16 @@ unbind_nodes(node_ids=["shape_1", "shape_3"])
 - `swimlane_v` - 垂直泳道
 - `container` - 通用容器，用于分组元素
 
-可以通过 `style` 参数使用 Draw.io 样式字符串来使用自定义形状。
+### UML类图形状
+
+- `uml_class` - UML 类，包含属性和方法的分隔区
+- `uml_interface` - 接口形状（斜体样式）
+- `uml_abstract_class` - 抽象类形状（斜体样式）
+- `uml_enum` - 枚举形状
+- `uml_package` - 包/命名空间形状
+- `uml_note` - UML 注释/备注形状
+
+可以通过 `style` 参数使用 Draw.io 样式字符串来使用自定义形状.
 
 ## 测试
 

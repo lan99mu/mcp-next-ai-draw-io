@@ -341,3 +341,122 @@ Create a vertical swimlane diagram for a software development pipeline:
    - You can mix activity shapes with basic shapes for flexibility
    - Use activity_note to add explanatory comments
    - Use connections with labels to show transitions and conditions
+
+## UML Class Diagrams
+
+### Example 12: Creating a UML Class Diagram
+
+**Prompt to AI:**
+```
+Create a UML class diagram for a simple e-commerce system:
+- Create a User class (uml_class) with attributes: id, email, password
+- Create a Customer class (uml_class) extending User with attribute: address
+- Create a Product class (uml_class) with attributes: id, name, price
+- Create an Order class (uml_class) with attributes: id, date, total
+- Create a PaymentProcessor interface (uml_interface) with method: processPayment()
+- Connect Customer to User with inheritance (solid line, hollow arrow)
+- Connect Customer to Order with association (solid line, open arrow)
+- Connect Order to Product with association
+- Connect Order to PaymentProcessor with dependency (dashed line, open arrow)
+```
+
+**Expected Result:**
+A UML class diagram showing classes, interfaces, inheritance, associations, and dependencies.
+
+### UML Class Diagram Shape Types
+
+The MCP server supports specialized shapes for UML class diagrams:
+
+- **`uml_class`** - Standard UML class with compartments for attributes and methods
+- **`uml_interface`** - Interface (displayed with italic font style)
+- **`uml_abstract_class`** - Abstract class (displayed with italic font style)
+- **`uml_enum`** - Enumeration type
+- **`uml_package`** - Package/namespace container
+- **`uml_note`** - UML note/comment annotation
+
+### UML Relationship Styles
+
+Use these style strings for different UML relationships:
+
+- **Inheritance (Generalization)**: `style="endArrow=block;endFill=0;endSize=12;"`
+  - Solid line with hollow triangle arrow
+  
+- **Interface Implementation (Realization)**: `style="endArrow=block;dashed=1;endFill=0;endSize=12;"`
+  - Dashed line with hollow triangle arrow
+  
+- **Association**: `style="endArrow=open;endSize=12;"`
+  - Solid line with open arrow
+  
+- **Dependency**: `style="endArrow=open;dashed=1;endSize=12;"`
+  - Dashed line with open arrow
+  
+- **Composition**: `style="endArrow=diamondThin;endFill=1;endSize=12;"`
+  - Solid line with filled diamond
+  
+- **Aggregation**: `style="endArrow=diamondThin;endFill=0;endSize=12;"`
+  - Solid line with hollow diamond
+
+### Example 13: Comprehensive Library System UML Diagram
+
+**Prompt to AI:**
+```
+Create a comprehensive UML class diagram for a library management system:
+- Create a uml_package named "library.management"
+- Inside the package, create these classes:
+  - Book (uml_class) with attributes: isbn, title, author, year
+  - Member (uml_class) with attributes: id, name, email
+  - Loan (uml_class) with attributes: id, loanDate, returnDate
+  - User (uml_abstract_class) with attributes: username, password
+  - Librarian (uml_class) with attribute: employeeId
+  - Searchable (uml_interface) with methods: search(), filter()
+  - BookStatus (uml_enum) with values: AVAILABLE, LOANED, REPAIR, LOST
+- Add relationships:
+  - Loan has Book (association)
+  - Loan has Member (association)
+  - Member extends User (inheritance)
+  - Librarian extends User (inheritance)
+  - Book implements Searchable (realization)
+  - Book uses BookStatus (dependency)
+- Add a uml_note explaining the system
+```
+
+**Expected Result:**
+A comprehensive UML class diagram with package, classes, abstract class, interface, enum, and various relationships.
+
+### Example 14: Simple Inheritance Hierarchy
+
+**Prompt to AI:**
+```
+Create a simple animal hierarchy UML class diagram:
+- Create an Animal abstract class (uml_abstract_class) with attributes: name, age
+- Create Dog, Cat, and Bird classes (uml_class) extending Animal
+- Create a Pet interface (uml_interface) with methods: play(), feed()
+- Connect Dog and Cat to Pet interface with realization
+- Add specific attributes to each animal (breed for Dog, indoor for Cat, canFly for Bird)
+```
+
+### Tips for UML Class Diagrams
+
+1. **Class structure formatting**:
+   - Separate class name, attributes, and methods with horizontal lines (use `───────`)
+   - Use visibility markers: `+` for public, `-` for private, `#` for protected
+   - Format: `ClassName\n───────\n- attribute: Type\n───────\n+ method(): ReturnType`
+
+2. **Stereotypes and markers**:
+   - Use `«interface»` for interfaces
+   - Use `«enumeration»` for enums
+   - Use `«abstract»` or italic style for abstract classes
+
+3. **Choose the right relationship type**:
+   - **Inheritance**: "is-a" relationship (Dog is an Animal)
+   - **Realization**: Implementing an interface (Class implements Interface)
+   - **Association**: "has-a" or "uses-a" relationship (Order has Products)
+   - **Dependency**: One class depends on another temporarily (Order uses PaymentProcessor)
+   - **Composition**: Strong ownership (Car has Engine - engine cannot exist without car)
+   - **Aggregation**: Weak ownership (Department has Employees - employees can exist independently)
+
+4. **Package organization**:
+   - Use `uml_package` to group related classes
+   - Place the package shape first, then add classes inside its bounds
+
+See `UML_CLASS_DIAGRAM_EXAMPLES.md` for detailed code examples and more advanced usage patterns.
