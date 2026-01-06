@@ -248,32 +248,24 @@ if __name__ == "__main__":
     print("Testing UML Class Diagram Support")
     print("=" * 50)
     
-    try:
-        # Run tests
-        xml1 = test_uml_class_diagram()
-        xml2 = test_comprehensive_uml_diagram()
-        xml3 = test_all_uml_shapes()
-        
-        print("\n" + "=" * 50)
-        print("✓ All UML class diagram tests passed!")
-        print("=" * 50)
-        
-        # Save examples
-        with open("uml_class_diagram_test.drawio", "w") as f:
-            f.write(xml1)
-        print("\n✓ Saved example diagram to: uml_class_diagram_test.drawio")
-        
-        with open("uml_comprehensive_test.drawio", "w") as f:
-            f.write(xml2)
-        print("✓ Saved comprehensive diagram to: uml_comprehensive_test.drawio")
-        
-        with open("uml_all_shapes_test.drawio", "w") as f:
-            f.write(xml3)
-        print("✓ Saved all shapes test to: uml_all_shapes_test.drawio")
-        
-    except AssertionError as e:
-        print(f"\n✗ Test failed: {e}")
-        raise
-    except Exception as e:
-        print(f"\n✗ Error: {e}")
-        raise
+    # Run tests
+    xml1 = test_uml_class_diagram()
+    xml2 = test_comprehensive_uml_diagram()
+    xml3 = test_all_uml_shapes()
+    
+    print("\n" + "=" * 50)
+    print("✓ All UML class diagram tests passed!")
+    print("=" * 50)
+    
+    # Save examples
+    with open("uml_class_diagram_test.drawio", "w") as f:
+        f.write(xml1)
+    print("\n✓ Saved example diagram to: uml_class_diagram_test.drawio")
+    
+    with open("uml_comprehensive_test.drawio", "w") as f:
+        f.write(xml2)
+    print("✓ Saved comprehensive diagram to: uml_comprehensive_test.drawio")
+    
+    with open("uml_all_shapes_test.drawio", "w") as f:
+        f.write(xml3)
+    print("✓ Saved all shapes test to: uml_all_shapes_test.drawio")
