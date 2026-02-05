@@ -150,14 +150,13 @@ def detect_crossings(cells: list[dict]) -> list[dict]:
             start2, end2 = get_connection_endpoints(conn2, shapes)
             
             # For now, we'll check simple line segment intersection
-            # TODO: In the future, handle waypoints to check multiple segments
+            # TODO: Handle waypoints by checking each segment between consecutive waypoints.
+            # This would involve: 1) Getting waypoint list from connection, 2) Creating
+            # segments between start->wp1, wp1->wp2, ..., wpN->end, 3) Checking each
+            # segment pair for intersections.
             intersection = line_segments_intersect(start1, end1, start2, end2)
             
             if intersection:
-                # Calculate midpoint for suggestion
-                mid_x = (start1[0] + end1[0] + start2[0] + end2[0]) / 4
-                mid_y = (start1[1] + end1[1] + start2[1] + end2[1]) / 4
-                
                 # Generate suggestion
                 suggestion = _generate_crossing_suggestion(
                     conn1, conn2, intersection, shapes
