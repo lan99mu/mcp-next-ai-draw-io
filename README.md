@@ -53,6 +53,7 @@ This MCP server follows the principle of **tool encapsulation** rather than appl
 - 📍 **Coordinate System** - Get detailed position information (coordinates, center, bounding box) for better spatial reasoning
 - 🔗 **Node Binding** - Bind nodes together to move them as a group
 - 🔀 **Connection Positioning** - Control entry/exit points and waypoint routing for precise connection placement
+- 🔍 **Line Crossing Detection** - Automatically detect when connections cross and get position hints for adjustments
 
 ### Key Improvements Over Basic Version / 相比基础版本的改进
 
@@ -180,6 +181,7 @@ Copilot will:
 |------|-------------|----------------|
 | `list_cells` | List all diagram elements | None |
 | `get_cell` | Get cell details | `cell_id` |
+| `detect_line_crossings` | Detect when connections cross and get position hints | None |
 
 ### Modification Tools / 修改工具
 
@@ -362,6 +364,53 @@ unbind_nodes(node_ids=["shape_1", "shape_3"])
 - Creating composite elements that should stay together
 
 **Note:** Bindings are preserved in the .drawio XML format using custom attributes.
+
+### Line Crossing Detection / 连线交叉检测
+
+The `detect_line_crossings` tool automatically detects when connections (lines/edges) in your diagram cross each other and provides position hints to help improve the layout.
+
+**How it works:**
+1. Analyzes all connections in the diagram
+2. Detects intersection points between connection lines
+3. Provides specific suggestions for fixing each crossing
+
+**Output includes:**
+- IDs and labels of crossing connections
+- Exact intersection point coordinates (x, y)
+- Multiple suggestions for fixing each crossing:
+  - Add waypoints to route connections around each other
+  - Reposition shapes to avoid crossings
+  - Adjust entry/exit points to change connection angles
+
+**Example usage:**
+```python
+# After creating a diagram with connections
+detect_line_crossings()
+
+# Example output:
+# Detected 2 line crossing(s):
+#
+# 1. Crossing between:
+#    - Connection 'Read Cache' (ID: conn_5)
+#    - Connection 'Query DB' (ID: conn_6)
+#    Lines cross at (260.0, 180.0). Consider these adjustments:
+#      1. Add waypoints to 'Read Cache' to route around the crossing
+#      2. Add waypoints to 'Query DB' to route around the crossing
+#      3. Reposition shapes connected by 'Read Cache' to avoid crossing
+#      4. Reposition shapes connected by 'Query DB' to avoid crossing
+#      5. Adjust entry/exit points to change connection angles
+```
+
+**Use cases:**
+- Automatically validate diagram layouts before finalizing
+- Get suggestions for improving diagram clarity
+- Help AI models make better layout decisions
+- Identify problem areas in complex diagrams
+
+**Benefits:**
+- Improves diagram readability by highlighting crossed lines
+- Provides actionable suggestions for AI models to auto-fix layouts
+- Works with both simple direct connections and complex routed connections
 
 ### Creation Tools / 创建工具
 
