@@ -27,6 +27,7 @@ from .xml_operations import (
     delete_cell_in_xml,
 )
 from .file_operations import load_diagram_file, save_diagram_file
+from .crossing_detector import detect_crossings
 
 
 # Global diagram storage
@@ -414,6 +415,14 @@ async def list_tools() -> list[Tool]:
                     }
                 },
                 "required": ["shape_id", "new_x", "new_y"]
+            }
+        ),
+        Tool(
+            name="detect_line_crossings",
+            description="Detect line crossings in the diagram and provide position hints for adjustments. This helps identify where connections (edges) cross each other and suggests ways to fix them.",
+            inputSchema={
+                "type": "object",
+                "properties": {}
             }
         ),
         Tool(
@@ -888,6 +897,41 @@ async def call_tool(name: str, arguments: Any) -> list[TextContent]:
                 type="text",
                 text=f"Moved shape '{shape_id}' from ({old_x}, {old_y}) to ({new_x}, {new_y})."
             )]
+    
+    elif name == "detect_line_crossings":
+        if current_xml:
+            cells = get_cells_from_xml(current_xml)
+        elif current_diagram:
+            xml_content = current_diagram.to_drawio_xml()
+            cells = get_cells_from_xml(xml_content)
+        else:
+            return [TextContent(
+                type="text",
+                text="No diagram available. Create a new diagram or load an existing one."
+            )]
+        
+        # Detect crossings
+        crossings = detect_crossings(cells)
+        
+        if not crossings:
+            return [TextContent(
+                type="text",
+                text="No line crossings detected in the diagram. All connections are clear!"
+            )]
+        
+        # Format crossing information
+        result_parts = [f"Detected {len(crossings)} line crossing(s):\n"]
+        
+        for i, crossing in enumerate(crossings, 1):
+            result_parts.append(f"\n{i}. Crossing between:")
+            result_parts.append(f"   - Connection '{crossing['connection1_label']}' (ID: {crossing['connection1_id']})")
+            result_parts.append(f"   - Connection '{crossing['connection2_label']}' (ID: {crossing['connection2_id']})")
+            result_parts.append(f"   {crossing['suggestion']}")
+        
+        return [TextContent(
+            type="text",
+            text="\n".join(result_parts)
+        )]
     
     else:
         return [TextContent(
