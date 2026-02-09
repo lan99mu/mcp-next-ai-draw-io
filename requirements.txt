@@ -1,2 +1,9 @@
+# ============================================================================
+# IMPORTANT: Python 3.10+ is required!
+# The mcp package requires Python >= 3.10. If you are using an older version,
+# you will see errors like "No matching distribution found for mcp>=1.23.0"
+# 
+# Please upgrade to Python 3.10 or higher before installing these dependencies.
+# ============================================================================
 mcp>=1.23.0
 pydantic>=2.0.0
