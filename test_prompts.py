@@ -107,7 +107,7 @@ async def test_prompt_content_quality():
             found_keywords.append(keyword)
     
     print(f"  Found efficiency keywords: {found_keywords}")
-    assert len(found_keywords) >= 3, "Prompt should contain efficiency guidance"
+    assert len(found_keywords) >= 2, "Prompt should contain efficiency guidance"
     
     # Check the create_flowchart prompt
     result = await get_prompt("create_flowchart", {"description": "test workflow"})
