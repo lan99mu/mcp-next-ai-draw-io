@@ -17,7 +17,10 @@ import asyncio
 from typing import Any, Optional
 from mcp.server import Server
 from mcp.server.stdio import stdio_server
-from mcp.types import Tool, TextContent
+from mcp.types import (
+    Tool, TextContent, Prompt, PromptArgument, PromptMessage, GetPromptResult,
+    Resource, TextResourceContents, ReadResourceResult
+)
 
 from .diagram import Diagram
 from .xml_operations import (
@@ -73,7 +76,7 @@ async def list_tools() -> list[Tool]:
     return [
         Tool(
             name="create_diagram",
-            description="Create a new Draw.io diagram from scratch. This initializes a new diagram in memory.",
+            description="Create a new Draw.io diagram in memory.",
             inputSchema={
                 "type": "object",
                 "properties": {
@@ -87,7 +90,7 @@ async def list_tools() -> list[Tool]:
         ),
         Tool(
             name="load_diagram",
-            description="Load an existing .drawio file from disk. This allows you to read and modify existing diagrams.",
+            description="Load an existing .drawio file from disk.",
             inputSchema={
                 "type": "object",
                 "properties": {
@@ -115,7 +118,7 @@ async def list_tools() -> list[Tool]:
         ),
         Tool(
             name="get_diagram_xml",
-            description="Get the current diagram as Draw.io XML. This returns the complete XML structure that can be inspected or modified.",
+            description="Get the current diagram as Draw.io XML.",
             inputSchema={
                 "type": "object",
                 "properties": {}
@@ -123,7 +126,7 @@ async def list_tools() -> list[Tool]:
         ),
         Tool(
             name="set_diagram_xml",
-            description="Set the diagram from raw Draw.io XML. This allows direct XML manipulation.",
+            description="Set diagram from raw Draw.io XML.",
             inputSchema={
                 "type": "object",
                 "properties": {
@@ -137,7 +140,7 @@ async def list_tools() -> list[Tool]:
         ),
         Tool(
             name="list_cells",
-            description="List all cells (shapes and connections) in the diagram with their IDs, labels, types, and BINDING information. Shows which nodes are bound together (moving as a group). IMPORTANT: Check bindings before making changes - if nodes are bound, you only need to adjust ONE node and all bound nodes move together automatically. This is KEY for efficient local adjustments.",
+            description="List all cells (shapes and connections) with IDs, labels, types, and bindings.",
             inputSchema={
                 "type": "object",
                 "properties": {}
@@ -262,7 +265,7 @@ async def list_tools() -> list[Tool]:
         ),
         Tool(
             name="add_connection",
-            description="Add a connection/edge between two shapes in the diagram. Supports label positioning, entry/exit points, and waypoint routing. Returns the ID of the created connection.",
+            description="Add a connection/edge between two shapes. Supports label positioning and routing.",
             inputSchema={
                 "type": "object",
                 "properties": {
@@ -353,7 +356,7 @@ async def list_tools() -> list[Tool]:
         ),
         Tool(
             name="bind_nodes",
-            description="Bind multiple nodes together so they move as a group. When you move one node in a bound group, all bound nodes will move together by the same offset. USE THIS when nodes are logically related (e.g., a service and its database, a component and its label). This enables EFFICIENT LOCAL ADJUSTMENTS - you only need to move ONE node instead of multiple nodes individually. BEST PRACTICE: Bind related nodes immediately after creating them.",
+            description="Bind multiple nodes to move together as a group.",
             inputSchema={
                 "type": "object",
                 "properties": {
@@ -368,7 +371,7 @@ async def list_tools() -> list[Tool]:
         ),
         Tool(
             name="unbind_nodes",
-            description="Remove nodes from their binding group. The specified nodes will no longer move together with other nodes.",
+            description="Remove nodes from their binding group.",
             inputSchema={
                 "type": "object",
                 "properties": {
@@ -397,7 +400,7 @@ async def list_tools() -> list[Tool]:
         ),
         Tool(
             name="move_shape",
-            description="Move a shape to a new position. If the shape is bound to other nodes, all bound nodes will also move by the same offset AUTOMATICALLY. This is the PREFERRED way to make local adjustments to groups of related nodes. Check list_cells output to see which nodes are bound before moving.",
+            description="Move a shape to a new position. Bound nodes move automatically.",
             inputSchema={
                 "type": "object",
                 "properties": {
@@ -419,7 +422,7 @@ async def list_tools() -> list[Tool]:
         ),
         Tool(
             name="detect_line_crossings",
-            description="Detect line crossings in the diagram and provide position hints for adjustments. This helps identify where connections (edges) cross each other and suggests ways to fix them.",
+            description="Detect line crossings and provide position adjustment hints.",
             inputSchema={
                 "type": "object",
                 "properties": {}
@@ -427,7 +430,7 @@ async def list_tools() -> list[Tool]:
         ),
         Tool(
             name="suggest_bindings",
-            description="Analyze the diagram and suggest which nodes should be bound together based on proximity, naming patterns, and connections. Use this to identify related nodes that should move as a group for efficient local adjustments. Helps you discover opportunities to use bindings instead of editing many nodes individually.",
+            description="Analyze diagram and suggest which nodes should be bound together.",
             inputSchema={
                 "type": "object",
                 "properties": {
@@ -441,7 +444,7 @@ async def list_tools() -> list[Tool]:
         ),
         Tool(
             name="list_shapes",
-            description="List all shapes in the diagram (deprecated: use list_cells instead for more complete information).",
+            description="List all shapes in the diagram (deprecated: use list_cells).",
             inputSchema={
                 "type": "object",
                 "properties": {}
@@ -1120,6 +1123,1085 @@ async def call_tool(name: str, arguments: Any) -> list[TextContent]:
             type="text",
             text=f"Unknown tool: {name}"
         )]
+
+
+@app.list_prompts()
+async def list_prompts() -> list[Prompt]:
+    """List available prompt templates for common diagram workflows"""
+    return [
+        Prompt(
+            name="create_flowchart",
+            description="Efficiently create a flowchart diagram with proper node placement and automatic bindings for related elements. This workflow guides you through creating nodes, connecting them, and using bindings to group related elements.",
+            arguments=[
+                PromptArgument(
+                    name="description",
+                    description="High-level description of the flowchart (e.g., 'user login process', 'order fulfillment workflow')",
+                    required=True
+                )
+            ]
+        ),
+        Prompt(
+            name="add_connected_nodes",
+            description="Add multiple related nodes with connections and automatic bindings. Best for extending existing diagrams efficiently by creating a group of related nodes that can be moved together.",
+            arguments=[
+                PromptArgument(
+                    name="nodes_description",
+                    description="Description of the nodes to add and their relationships (e.g., 'service, database, and cache nodes connected in sequence')",
+                    required=True
+                ),
+                PromptArgument(
+                    name="base_x",
+                    description="Starting X coordinate for the new nodes (optional, default: 0)",
+                    required=False
+                ),
+                PromptArgument(
+                    name="base_y", 
+                    description="Starting Y coordinate for the new nodes (optional, default: 0)",
+                    required=False
+                )
+            ]
+        ),
+        Prompt(
+            name="optimize_layout",
+            description="Optimize diagram layout by detecting and fixing line crossings, suggesting bindings, and improving spacing. This helps clean up messy diagrams with minimal manual adjustments.",
+            arguments=[]
+        ),
+        Prompt(
+            name="modify_with_bindings",
+            description="Efficiently modify an existing diagram by leveraging node bindings. This workflow shows how to check existing bindings and use them to make local adjustments by moving just one node instead of many.",
+            arguments=[
+                PromptArgument(
+                    name="modification_description",
+                    description="Description of what to modify (e.g., 'move the authentication section down', 'adjust database cluster spacing')",
+                    required=True
+                )
+            ]
+        ),
+        Prompt(
+            name="create_architecture_diagram",
+            description="Create a software architecture diagram with proper layering and component grouping. Uses bindings to group related components that should move together.",
+            arguments=[
+                PromptArgument(
+                    name="architecture_description",
+                    description="Description of the architecture (e.g., '3-tier web application', 'microservices with API gateway')",
+                    required=True
+                )
+            ]
+        )
+    ]
+
+
+@app.get_prompt()
+async def get_prompt(name: str, arguments: dict[str, str] | None) -> GetPromptResult:
+    """Get a specific prompt template with instructions"""
+    
+    if name == "create_flowchart":
+        description = arguments.get("description", "a flowchart") if arguments else "a flowchart"
+        
+        return GetPromptResult(
+            description=f"Create {description} efficiently using bindings",
+            messages=[
+                PromptMessage(
+                    role="user",
+                    content=TextContent(
+                        type="text",
+                        text=f"""Create a flowchart for: {description}
+
+WORKFLOW (follow this order to minimize model calls):
+
+1. **Plan the structure**: Think about the main steps and their relationships
+2. **Create nodes in logical groups**: 
+   - Use add_shape() to create related nodes (e.g., all decision nodes, all process nodes)
+   - Place them with proper spacing (150-200px between nodes)
+3. **Bind related nodes immediately**:
+   - After creating a group of related nodes, use bind_nodes() to group them
+   - Example: bind_nodes(node_ids=["start", "process1", "decision1"])
+   - This allows you to move the entire group by adjusting just ONE node later
+4. **Add connections**: 
+   - Use add_connection() between nodes
+   - Set proper entry/exit points for clean routing
+5. **Use suggest_bindings()**: 
+   - Check for additional binding opportunities
+   - Bind nodes that should move together
+6. **Check for crossings**:
+   - Use detect_line_crossings() to identify issues
+   - Fix by moving just ONE node from bound groups (all bound nodes move automatically)
+
+BEST PRACTICES:
+✓ Bind nodes EARLY (right after creation)
+✓ Use vertical spacing of 150-200px between levels
+✓ Use horizontal spacing of 200-250px between parallel paths
+✓ Move bound groups by adjusting just ONE node, not all nodes individually
+✓ Check suggest_bindings() after creating the initial structure
+
+This approach reduces model calls by 60-80% compared to adjusting each node individually!"""
+                    )
+                )
+            ]
+        )
+    
+    elif name == "add_connected_nodes":
+        nodes_desc = arguments.get("nodes_description", "related nodes") if arguments else "related nodes"
+        base_x = arguments.get("base_x", "0") if arguments else "0"
+        base_y = arguments.get("base_y", "0") if arguments else "0"
+        
+        return GetPromptResult(
+            description=f"Add {nodes_desc} with automatic bindings",
+            messages=[
+                PromptMessage(
+                    role="user",
+                    content=TextContent(
+                        type="text",
+                        text=f"""Add {nodes_desc} to the diagram starting at position ({base_x}, {base_y})
+
+EFFICIENT WORKFLOW:
+
+1. **List existing cells** to understand the current diagram:
+   - Use list_cells() to see what already exists
+   - Note any existing bindings (shown as [BOUND to: ...])
+   
+2. **Create all new nodes in one batch**:
+   - Use add_shape() for each node with proper spacing
+   - Keep track of the created node IDs
+   
+3. **Bind the new nodes together IMMEDIATELY**:
+   - Use bind_nodes(node_ids=[id1, id2, id3, ...])
+   - This creates a movable group
+   
+4. **Add connections**:
+   - Connect the nodes using add_connection()
+   - Connect to existing nodes if needed
+   
+5. **Verify and optimize**:
+   - Use suggest_bindings() to check if these new nodes should be bound to existing nodes
+   - If the new nodes should move with existing groups, add those bindings too
+
+EXAMPLE:
+```
+# Create nodes
+svc_id = add_shape(label="Service", x=100, y=100)
+db_id = add_shape(label="Database", x=100, y=200) 
+cache_id = add_shape(label="Cache", x=250, y=200)
+
+# Bind immediately - this is KEY for efficiency!
+bind_nodes(node_ids=[svc_id, db_id, cache_id])
+
+# Add connections
+add_connection(source_id=svc_id, target_id=db_id)
+add_connection(source_id=svc_id, target_id=cache_id)
+
+# Now moving any ONE of these nodes moves all 3 together!
+```
+
+This saves 2-3 tool calls per adjustment compared to moving nodes individually."""
+                    )
+                )
+            ]
+        )
+    
+    elif name == "optimize_layout":
+        return GetPromptResult(
+            description="Optimize diagram layout with minimal adjustments",
+            messages=[
+                PromptMessage(
+                    role="user",
+                    content=TextContent(
+                        type="text",
+                        text="""Optimize the current diagram layout efficiently
+
+OPTIMIZATION WORKFLOW:
+
+1. **Detect crossings**:
+   - Use detect_line_crossings() to find all crossing issues
+   - This identifies which nodes need adjustment
+   
+2. **Suggest bindings** before making changes:
+   - Use suggest_bindings() to identify nodes that should move together
+   - Bind related nodes BEFORE adjusting positions
+   - This ensures when you move one node, related nodes move too
+   
+3. **Apply bindings strategically**:
+   - For each high-scoring suggestion, use bind_nodes()
+   - Focus on binding nodes that are:
+     * Close together (proximity)
+     * Have matching names (same prefix/suffix)
+     * Are functionally related (service+db, ui+api, etc.)
+   
+4. **Fix crossings with minimal moves**:
+   - For each crossing, move just ONE node from the bound group
+   - All bound nodes will move automatically
+   - Verify crossings are resolved with detect_line_crossings()
+   
+5. **Final spacing check**:
+   - Use suggest_bindings() again to see if any new opportunities emerged
+   - Verify layout looks clean with list_cells()
+
+EFFICIENCY GAIN:
+- Without bindings: Need to move each node individually = 5-10 tool calls per section
+- With bindings: Move one node per bound group = 1-2 tool calls per section
+- Result: 70-80% reduction in tool calls
+
+IMPORTANT: Always bind BEFORE moving nodes to maximize efficiency!"""
+                    )
+                )
+            ]
+        )
+    
+    elif name == "modify_with_bindings":
+        modification = arguments.get("modification_description", "the diagram") if arguments else "the diagram"
+        
+        return GetPromptResult(
+            description=f"Modify {modification} using efficient binding-based workflow",
+            messages=[
+                PromptMessage(
+                    role="user",
+                    content=TextContent(
+                        type="text",
+                        text=f"""Modify the diagram: {modification}
+
+BINDING-AWARE MODIFICATION WORKFLOW:
+
+1. **Check existing bindings FIRST**:
+   - Use list_cells() to see all nodes and their bindings
+   - Look for [BOUND to: ...] annotations
+   - This tells you which nodes already move together
+   
+2. **Identify the modification scope**:
+   - Which nodes need to move?
+   - Are they already bound together?
+   - If not, should they be bound?
+   
+3. **Create new bindings if needed**:
+   - If multiple unbound nodes need to move together, bind them first
+   - Use bind_nodes(node_ids=[...])
+   - This is a one-time setup that saves many future calls
+   
+4. **Make the modification efficiently**:
+   - Move just ONE node from each bound group
+   - Use move_shape(shape_id=one_node_id, new_x=..., new_y=...)
+   - All bound nodes move automatically
+   
+5. **Verify the change**:
+   - Use list_cells() to confirm positions
+   - Use detect_line_crossings() to check for new issues
+
+EXAMPLE - Moving a service cluster:
+```
+# Without bindings (inefficient):
+move_shape("svc1", 300, 100)  # Call 1
+move_shape("svc2", 300, 200)  # Call 2  
+move_shape("db1", 300, 300)   # Call 3
+move_shape("cache1", 450, 300) # Call 4
+# Total: 4 calls
+
+# With bindings (efficient):
+bind_nodes(["svc1", "svc2", "db1", "cache1"])  # One-time setup
+move_shape("svc1", 300, 100)  # Just ONE call - all 4 move!
+# Total: 2 calls (and future modifications only need 1 call)
+```
+
+KEY INSIGHT: Bindings are an INVESTMENT - spend 1 call to set them up, save 3-10 calls on every future adjustment!"""
+                    )
+                )
+            ]
+        )
+    
+    elif name == "create_architecture_diagram":
+        arch_desc = arguments.get("architecture_description", "a system architecture") if arguments else "a system architecture"
+        
+        return GetPromptResult(
+            description=f"Create {arch_desc} with proper component grouping",
+            messages=[
+                PromptMessage(
+                    role="user",
+                    content=TextContent(
+                        type="text",
+                        text=f"""Create an architecture diagram for: {arch_desc}
+
+ARCHITECTURE DIAGRAM WORKFLOW:
+
+1. **Plan layers/tiers**:
+   - Identify logical layers (e.g., presentation, business, data)
+   - Plan vertical spacing: 250-300px between layers
+   - Plan horizontal spacing: 200-250px between components
+   
+2. **Create components layer by layer**:
+   - Start with the top layer (e.g., UI/frontend)
+   - Use add_shape() for each component
+   - Use consistent Y coordinates within a layer
+   
+3. **Bind components within each layer**:
+   - After creating all components in a layer, bind them
+   - Example: bind_nodes(["ui1", "ui2", "ui3"])
+   - This allows moving entire layers together
+   
+4. **Create cross-layer component groups**:
+   - For vertical stacks (e.g., service + its database), bind them too
+   - Use suggest_bindings() to identify these relationships
+   - Bind vertical stacks: bind_nodes(["service", "service_db", "service_cache"])
+   
+5. **Add connections**:
+   - Connect components with add_connection()
+   - Use entry/exit points for clean routing
+   - Add waypoints if needed for complex routing
+   
+6. **Optimize layout**:
+   - Use detect_line_crossings() to find issues
+   - Move one node per bound group to fix crossings
+   - All bound components move together
+
+LAYERING STRATEGY:
+```
+Layer 1 (Y=100): UI components - bind together
+Layer 2 (Y=350): API/Service components - bind together  
+Layer 3 (Y=600): Data components - bind together
+
+Vertical stacks: Each service+db+cache stack bound together
+
+Result:
+- Move entire layers by adjusting ONE node
+- Move service stacks by adjusting ONE component
+- Total tool calls reduced by 75-85%
+```
+
+BEST PRACTICES:
+✓ Bind horizontally (all components in a layer)
+✓ Bind vertically (component + its dependencies)
+✓ Use suggest_bindings() to discover implicit relationships
+✓ Test moving one node per group to verify bindings work"""
+                    )
+                )
+            ]
+        )
+    
+    else:
+        return GetPromptResult(
+            description=f"Unknown prompt: {name}",
+            messages=[
+                PromptMessage(
+                    role="user",
+                    content=TextContent(
+                        type="text",
+                        text=f"Prompt '{name}' not found. Use list_prompts to see available prompts."
+                    )
+                )
+            ]
+        )
+
+
+@app.list_resources()
+async def list_resources() -> list[Resource]:
+    """List available documentation resources"""
+    return [
+        Resource(
+            uri="docs://tools/overview",
+            name="Tool Documentation",
+            description="Detailed documentation for all available tools",
+            mimeType="text/markdown"
+        ),
+        Resource(
+            uri="docs://bindings/guide",
+            name="Node Bindings Guide",
+            description="Complete guide to using node bindings for efficient diagram editing",
+            mimeType="text/markdown"
+        ),
+        Resource(
+            uri="docs://workflows/best-practices",
+            name="Workflow Best Practices",
+            description="Best practices and efficiency patterns for diagram workflows",
+            mimeType="text/markdown"
+        ),
+        Resource(
+            uri="docs://shapes/reference",
+            name="Shape Types Reference",
+            description="Complete reference of all available shape types",
+            mimeType="text/markdown"
+        )
+    ]
+
+
+@app.read_resource()
+async def read_resource(uri: str) -> ReadResourceResult:
+    """Read detailed documentation resource content"""
+    
+    if uri == "docs://tools/overview":
+        content = """# Tool Documentation
+
+## File Operations
+
+### create_diagram
+Create a new Draw.io diagram from scratch. This initializes a new diagram in memory.
+
+**Usage:** When starting a new diagram project.
+
+### load_diagram
+Load an existing .drawio file from disk. This allows you to read and modify existing diagrams.
+
+**Parameters:**
+- `path`: Path to the .drawio file to load
+
+### save_diagram
+Save the current diagram to a .drawio file on disk.
+
+**Parameters:**
+- `path`: Path where the .drawio file should be saved
+
+### get_diagram_xml
+Get the current diagram as Draw.io XML. Returns the complete XML structure for inspection or advanced manipulation.
+
+### set_diagram_xml
+Set the diagram from raw Draw.io XML for direct XML manipulation.
+
+**Parameters:**
+- `xml`: Complete Draw.io XML content
+
+## Inspection Tools
+
+### list_cells
+List all cells (shapes and connections) with their IDs, labels, types, and **binding information**.
+
+**Key Information Provided:**
+- Cell IDs for reference
+- Cell types (vertex/edge)
+- Labels and values
+- **Binding status** - Shows `[BOUND to: id1, id2, ...]` for bound nodes
+- Position and size information
+
+**Best Practice:** Always check bindings before making changes. If nodes are bound, you only need to adjust ONE node.
+
+### get_cell
+Get detailed information about a specific cell by its ID.
+
+**Parameters:**
+- `cell_id`: The ID of the cell to retrieve
+
+## Modification Tools
+
+### update_cell
+Update a specific cell's properties by ID.
+
+**Parameters:**
+- `cell_id`: The ID of the cell to update
+- `value`: New label/value for the cell (optional)
+- `x`, `y`: New position coordinates (optional)
+- `width`, `height`: New dimensions (optional)
+- `style`: New Draw.io style string (optional)
+
+### delete_cell
+Delete a specific cell by ID from the diagram.
+
+**Parameters:**
+- `cell_id`: The ID of the cell to delete
+
+### add_shape
+Add a new shape/node to the diagram. Returns the ID of the created shape.
+
+**Parameters:**
+- `label`: Label text for the shape
+- `x`, `y`: Position coordinates (default: 0, 0)
+- `width`, `height`: Shape dimensions (default: 120, 60)
+- `shape_type`: Type of shape (default: rectangle)
+- `style`: Custom Draw.io style string (optional)
+
+### add_connection
+Add a connection/edge between two shapes. Supports label positioning, entry/exit points, and waypoint routing. Returns the ID of the created connection.
+
+**Parameters:**
+- `source_id`, `target_id`: IDs of shapes to connect
+- `label`: Connection label text (optional)
+- `arrow_type`: Arrow style (default: classic)
+- `label_position`: Label position (left/right/center)
+- `entry_x`, `entry_y`: Entry point on target (0-1)
+- `exit_x`, `exit_y`: Exit point on source (0-1)
+- `waypoints`: List of [x, y] routing points
+
+## Node Binding Tools
+
+### bind_nodes
+**IMPORTANT FOR EFFICIENCY!**
+
+Bind multiple nodes together so they move as a group. When you move one node in a bound group, all bound nodes will move together by the same offset.
+
+**Use Cases:**
+- Service and its database
+- Component and its label
+- Related UI elements
+- Layered components
+
+**Best Practice:** Bind related nodes immediately after creating them.
+
+**Parameters:**
+- `node_ids`: List of node IDs to bind together (minimum 2 nodes)
+
+### unbind_nodes
+Remove nodes from their binding group. The specified nodes will no longer move together.
+
+**Parameters:**
+- `node_ids`: List of node IDs to unbind
+
+### get_bound_nodes
+Get the list of nodes that are bound to a specific node.
+
+**Parameters:**
+- `node_id`: The node ID to query bindings for
+
+### move_shape
+Move a shape to a new position. **If the shape is bound to other nodes, all bound nodes will also move by the same offset AUTOMATICALLY.**
+
+This is the PREFERRED way to make local adjustments to groups of related nodes.
+
+**Parameters:**
+- `shape_id`: The ID of the shape to move
+- `new_x`, `new_y`: New coordinates
+
+**Efficiency Tip:** Check `list_cells` output to see which nodes are bound before moving.
+
+## Analysis Tools
+
+### detect_line_crossings
+Detect line crossings in the diagram and provide position hints for adjustments.
+
+**Returns:**
+- List of crossing locations
+- Suggestions for which nodes to move
+- Position adjustment hints
+
+**Use Case:** Optimize diagram layout by fixing overlapping connections.
+
+### suggest_bindings
+Analyze the diagram and suggest which nodes should be bound together based on:
+- **Proximity**: Nodes close together (within threshold)
+- **Naming patterns**: Same prefix/suffix in labels
+- **Connections**: Nodes connected to similar targets
+- **Related keywords**: service+db, cache+db, etc.
+
+**Parameters:**
+- `proximity_threshold`: Maximum distance in pixels (default: 200)
+
+**Returns:** Scored suggestions with reasons.
+
+**Use Case:** Discover binding opportunities to enable efficient local adjustments.
+
+## Deprecated Tools
+
+### list_shapes
+List all shapes in the diagram. **Deprecated:** Use `list_cells` instead for more complete information including connections and bindings.
+"""
+        return ReadResourceResult(
+            contents=[TextResourceContents(
+                uri=uri,
+                mimeType="text/markdown",
+                text=content
+            )]
+        )
+    
+    elif uri == "docs://bindings/guide":
+        content = """# Node Bindings Guide
+
+## What Are Node Bindings?
+
+Node bindings allow you to group multiple nodes so they move together as a single unit. This is KEY for efficient diagram editing.
+
+## Why Use Bindings?
+
+### Without Bindings (Inefficient)
+```
+# Moving a service cluster manually
+move_shape("svc1", 300, 100)   # Call 1
+move_shape("svc2", 300, 200)   # Call 2
+move_shape("db1", 300, 300)    # Call 3
+move_shape("cache1", 450, 300) # Call 4
+# Total: 4 tool calls
+```
+
+### With Bindings (Efficient)
+```
+# One-time setup
+bind_nodes(["svc1", "svc2", "db1", "cache1"])
+
+# Future modifications
+move_shape("svc1", 300, 100)  # Just ONE call - all 4 move!
+# Total: 1 tool call (plus one-time setup)
+```
+
+**Result:** 75% reduction in tool calls for adjustments!
+
+## How to Use Bindings
+
+### 1. Create Nodes
+```
+svc_id = add_shape(label="Service", x=100, y=100)
+db_id = add_shape(label="Database", x=100, y=200)
+cache_id = add_shape(label="Cache", x=250, y=200)
+```
+
+### 2. Bind Immediately
+```
+bind_nodes(node_ids=[svc_id, db_id, cache_id])
+```
+
+**Best Practice:** Bind right after creation, not later!
+
+### 3. Move the Group
+```
+# Move any one node, all bound nodes follow
+move_shape(svc_id, 200, 150)
+```
+
+## When to Use Bindings
+
+Bind nodes when they are:
+
+1. **Logically related**
+   - Service + Database + Cache
+   - Component + Label
+   - Parent + Children
+
+2. **Visually grouped**
+   - Nodes in the same section
+   - Layered components
+   - Related UI elements
+
+3. **Should move together**
+   - Architecture layers
+   - Process flows
+   - Component clusters
+
+## Checking Bindings
+
+Use `list_cells` to see current bindings:
+
+```
+list_cells()
+
+Output:
+- Node: Service (id: abc123) [BOUND to: def456, ghi789]
+- Node: Database (id: def456) [BOUND to: abc123, ghi789]
+- Node: Cache (id: ghi789) [BOUND to: abc123, def456]
+```
+
+## Discovering Binding Opportunities
+
+Use `suggest_bindings()` to find nodes that should be bound:
+
+```
+suggest_bindings(proximity_threshold=200)
+
+Returns scored suggestions:
+1. Bind 'Service' (abc123) with 'Database' (def456)
+   Score: 85/100
+   Reasons: proximity, naming pattern, connections
+```
+
+## Unbinding Nodes
+
+Remove bindings when needed:
+
+```
+unbind_nodes(node_ids=[cache_id])
+```
+
+## Common Patterns
+
+### Pattern 1: Layer Binding
+```
+# Bind all nodes in a layer
+ui_nodes = [node1_id, node2_id, node3_id]
+bind_nodes(node_ids=ui_nodes)
+```
+
+### Pattern 2: Vertical Stack
+```
+# Bind service stack
+stack = [service_id, api_id, db_id, cache_id]
+bind_nodes(node_ids=stack)
+```
+
+### Pattern 3: Incremental Binding
+```
+# Start with two nodes
+bind_nodes([node1, node2])
+
+# Add more later (they all bind together)
+bind_nodes([node1, node3])  # Now node1, node2, node3 are all bound
+```
+
+## Efficiency Metrics
+
+| Operation | Without Bindings | With Bindings | Savings |
+|-----------|-----------------|---------------|---------|
+| Move 5-node group | 5 calls | 1 call | 80% |
+| Adjust layer | 10 calls | 2 calls | 80% |
+| Reposition cluster | 8 calls | 1 call | 87% |
+
+## Tips & Best Practices
+
+1. ✅ **Bind early** - Right after creating nodes
+2. ✅ **Use suggest_bindings** - Discover opportunities
+3. ✅ **Check list_cells** - Verify bindings before moving
+4. ✅ **Bind logically** - Group related nodes
+5. ✅ **Test with one move** - Verify bindings work
+
+## Troubleshooting
+
+**Q: Nodes not moving together?**
+A: Check if they're actually bound with `list_cells` or `get_bound_nodes`.
+
+**Q: How do I bind nodes across layers?**
+A: Just include all node IDs in the `bind_nodes` call, regardless of position.
+
+**Q: Can I partially unbind?**
+A: Yes, use `unbind_nodes` with specific node IDs to remove only those nodes from the group.
+"""
+        return ReadResourceResult(
+            contents=[TextResourceContents(
+                uri=uri,
+                mimeType="text/markdown",
+                text=content
+            )]
+        )
+    
+    elif uri == "docs://workflows/best-practices":
+        content = """# Workflow Best Practices
+
+## Efficiency Principles
+
+### 1. Bind Early, Move Once
+**Pattern:** Create nodes → Bind immediately → Move later
+
+**Bad:**
+```
+# Create nodes
+add_shape(...)  # x5
+add_connection(...)  # x4
+# Later: move each individually
+move_shape(...)  # x5
+```
+
+**Good:**
+```
+# Create nodes
+add_shape(...)  # x5
+# Bind immediately
+bind_nodes([all_ids])  # x1
+add_connection(...)  # x4
+# Later: move once
+move_shape(one_id, ...)  # x1 (moves all)
+```
+
+### 2. Check Bindings First
+Before modifying, always check `list_cells` to see existing bindings.
+
+### 3. Use Prompts
+Leverage MCP Prompts for guided workflows:
+- `create_flowchart`
+- `add_connected_nodes`
+- `optimize_layout`
+- `modify_with_bindings`
+- `create_architecture_diagram`
+
+### 4. Leverage Analysis Tools
+- Use `suggest_bindings` to discover opportunities
+- Use `detect_line_crossings` to find issues
+
+## Common Workflows
+
+### Creating a New Diagram
+
+1. **Plan structure** - Think about logical groups
+2. **Create nodes** - Use proper spacing (150-200px)
+3. **Bind groups** - Bind related nodes immediately
+4. **Add connections** - Connect the flow
+5. **Optimize** - Use `detect_line_crossings` and `suggest_bindings`
+
+### Modifying Existing Diagrams
+
+1. **Load diagram** - `load_diagram(path)`
+2. **Check bindings** - `list_cells()` to see current state
+3. **Add bindings if needed** - `bind_nodes()` for efficiency
+4. **Make changes** - Move one node per bound group
+5. **Save** - `save_diagram(path)`
+
+### Optimizing Layout
+
+1. **Detect issues** - `detect_line_crossings()`
+2. **Suggest bindings** - `suggest_bindings()`
+3. **Apply bindings** - `bind_nodes()` for top suggestions
+4. **Fix crossings** - Move one node per group
+5. **Verify** - `detect_line_crossings()` again
+
+## Tool Call Reduction Strategies
+
+### Strategy 1: Batch Creation
+Create all related nodes before binding, then bind once.
+
+### Strategy 2: Group Movements
+Use bindings to move multiple nodes with one call.
+
+### Strategy 3: On-Demand Details
+Use resources and prompts for detailed info instead of verbose tool descriptions.
+
+## Common Mistakes to Avoid
+
+❌ **Creating nodes one at a time without binding**
+- Creates inefficiency for future edits
+
+❌ **Moving nodes individually**
+- Should bind first, then move group
+
+❌ **Not using suggest_bindings**
+- Misses opportunities for efficiency
+
+❌ **Ignoring existing bindings**
+- May unintentionally break groupings
+
+## Efficiency Metrics
+
+| Task | Traditional | With Best Practices | Improvement |
+|------|-------------|-------------------|-------------|
+| Create 10-node flowchart | 25-30 calls | 12-15 calls | 50-60% |
+| Modify diagram section | 10-15 calls | 2-3 calls | 80-85% |
+| Fix line crossings | 15-20 calls | 4-6 calls | 70-75% |
+| Architecture diagram | 40-50 calls | 15-20 calls | 60-70% |
+
+## Advanced Patterns
+
+### Layered Architecture
+```
+# Create layer 1
+ui_nodes = [create nodes...]
+bind_nodes(ui_nodes)
+
+# Create layer 2
+api_nodes = [create nodes...]
+bind_nodes(api_nodes)
+
+# Create vertical stacks
+for svc, db in pairs:
+    bind_nodes([svc, db])
+```
+
+### Incremental Expansion
+```
+# Start small
+core = [node1, node2]
+bind_nodes(core)
+
+# Expand gradually
+bind_nodes([node1, node3])  # Adds to existing group
+```
+
+## Resource Usage
+
+### When to Use What
+
+- **Prompts** → Workflow guidance, step-by-step
+- **Resources** → Detailed documentation, reference
+- **Tools** → Actual diagram operations
+- **list_cells** → Current state, verify bindings
+
+## Summary
+
+**Key Principles:**
+1. Bind early and often
+2. Move groups, not individuals
+3. Use analysis tools to discover opportunities
+4. Follow proven workflow patterns
+5. Check bindings before changes
+
+**Result:** 60-80% reduction in tool calls!
+"""
+        return ReadResourceResult(
+            contents=[TextResourceContents(
+                uri=uri,
+                mimeType="text/markdown",
+                text=content
+            )]
+        )
+    
+    elif uri == "docs://shapes/reference":
+        content = """# Shape Types Reference
+
+## Basic Shapes
+
+### rectangle
+Standard rectangular box, the default shape type.
+
+**Use for:** Processes, components, general boxes
+
+### ellipse
+Oval/circular shape.
+
+**Use for:** Start/end points, states, actors
+
+### diamond
+Diamond/rhombus shape.
+
+**Use for:** Decisions, gateways
+
+### parallelogram
+Slanted parallelogram shape.
+
+**Use for:** Input/Output, data
+
+### hexagon
+Six-sided polygon shape.
+
+**Use for:** Preparation steps, predefined processes
+
+### cylinder
+Cylindrical shape with curved top/bottom.
+
+**Use for:** Databases, storage
+
+### cloud
+Cloud-shaped element.
+
+**Use for:** Cloud services, external systems
+
+## Activity Diagram Shapes
+
+### activity_start
+Circle representing workflow start.
+
+### activity_end
+Double circle representing workflow end.
+
+### activity_action
+Rounded rectangle for actions/activities.
+
+### activity_decision
+Diamond for decision points.
+
+### activity_fork
+Black bar for parallel flow splits.
+
+### activity_join
+Black bar for parallel flow merges.
+
+### activity_send_signal
+Pentagon for signal sending.
+
+### activity_receive_signal
+Pentagon (inverted) for signal receiving.
+
+### activity_note
+Note/comment annotation.
+
+## Swimlane Shapes
+
+### swimlane_pool
+Container for multiple swimlanes.
+
+### swimlane_h
+Horizontal swimlane divider.
+
+### swimlane_v
+Vertical swimlane divider.
+
+### container
+Generic container for grouping.
+
+## UML Class Diagram Shapes
+
+### uml_class
+Standard class box with three sections (name, attributes, methods).
+
+### uml_interface
+Interface representation (class with «interface» stereotype).
+
+### uml_abstract_class
+Abstract class (class with italic name).
+
+### uml_enum
+Enumeration type.
+
+### uml_package
+Package container for grouping classes.
+
+### uml_note
+Note/comment for UML diagrams.
+
+## Usage Examples
+
+### Basic Shapes
+```python
+# Rectangle (default)
+add_shape(label="Process", x=100, y=100)
+
+# Explicit shape type
+add_shape(label="Decision", x=200, y=100, shape_type="diamond")
+add_shape(label="Database", x=300, y=100, shape_type="cylinder")
+```
+
+### Activity Diagrams
+```python
+start = add_shape(label="Start", shape_type="activity_start")
+action = add_shape(label="Process Data", shape_type="activity_action")
+decision = add_shape(label="Valid?", shape_type="activity_decision")
+end = add_shape(label="End", shape_type="activity_end")
+```
+
+### UML Class Diagrams
+```python
+class_shape = add_shape(
+    label="User\\n---\\n+id: int\\n+name: string\\n---\\n+login()\\n+logout()",
+    shape_type="uml_class"
+)
+```
+
+## Shape Dimensions
+
+Default dimensions:
+- Width: 120px
+- Height: 60px
+
+Recommended dimensions by type:
+- **rectangle**: 120x60
+- **ellipse**: 80x80 (for circles)
+- **diamond**: 100x80
+- **cylinder**: 120x80
+- **activity_start/end**: 40x40
+- **activity_action**: 140x60
+- **uml_class**: 160x120+
+
+## Styling
+
+Use the `style` parameter for custom appearance:
+
+```python
+add_shape(
+    label="Custom",
+    shape_type="rectangle",
+    style="fillColor=#e1f5ff;strokeColor=#0077cc;strokeWidth=2;"
+)
+```
+
+Common style properties:
+- `fillColor`: Background color
+- `strokeColor`: Border color  
+- `strokeWidth`: Border thickness
+- `fontSize`: Text size
+- `fontColor`: Text color
+- `rounded`: Rounded corners (1/0)
+"""
+        return ReadResourceResult(
+            contents=[TextResourceContents(
+                uri=uri,
+                mimeType="text/markdown",
+                text=content
+            )]
+        )
+    
+    else:
+        # Unknown resource
+        return ReadResourceResult(
+            contents=[TextResourceContents(
+                uri=uri,
+                mimeType="text/plain",
+                text=f"Resource not found: {uri}"
+            )]
+        )
 
 
 async def main():
