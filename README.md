@@ -53,6 +53,7 @@ This MCP server follows the principle of **tool encapsulation** rather than appl
 - 📍 **Coordinate System** - Get detailed position information (coordinates, center, bounding box) for better spatial reasoning
 - 🔗 **Node Binding** - Bind nodes together to move them as a group
 - 🔀 **Connection Positioning** - Control entry/exit points and waypoint routing for precise connection placement
+- 🔍 **Line Crossing Detection** - Automatically detect when connections cross and get position hints for adjustments
 
 ### Key Improvements Over Basic Version / 相比基础版本的改进
 
@@ -180,6 +181,7 @@ Copilot will:
 |------|-------------|----------------|
 | `list_cells` | List all diagram elements | None |
 | `get_cell` | Get cell details | `cell_id` |
+| `detect_line_crossings` | Detect when connections cross and get position hints | None |
 
 ### Modification Tools / 修改工具
 
@@ -192,12 +194,21 @@ Copilot will:
 
 ### Node Binding Tools / 节点绑定工具
 
+**IMPORTANT for Efficient Local Adjustments**: Node binding is KEY for making local changes without editing many nodes individually!
+
 | Tool | Description | Key Parameters |
 |------|-------------|----------------|
 | `bind_nodes` | Bind multiple nodes together to move as a group | `node_ids` (list of node IDs) |
 | `unbind_nodes` | Unbind nodes from their group | `node_ids` (list of node IDs) |
 | `get_bound_nodes` | Get nodes bound to a specific node | `node_id` |
 | `move_shape` | Move a shape (and its bound nodes) to a new position | `shape_id`, `new_x`, `new_y` |
+| `suggest_bindings` | **NEW** Get intelligent suggestions for which nodes should be bound | `proximity_threshold` (optional, default: 200) |
+
+**Why Use Bindings?**
+- ✅ **Efficiency**: Move related nodes together by moving just ONE node
+- ✅ **Local Adjustments**: Make surgical changes to specific groups without affecting the whole diagram
+- ✅ **Maintainability**: Keep related components together (e.g., service + database, component + label)
+- ✅ **Visibility**: `list_cells` shows which nodes are bound with `[BOUND to: ...]` indicators
 
 ### Connection Label Positioning / 连接标签位置
 
@@ -328,16 +339,47 @@ This helps the LLM understand that shape_2 is directly below shape_1 (same x-coo
 
 ### Node Binding / 节点绑定
 
-Node binding allows you to group multiple nodes together so they move as a unit:
+Node binding allows you to group multiple nodes together so they move as a unit. **This is CRITICAL for making efficient local adjustments without editing many nodes individually.**
+
+**🚀 RECOMMENDED WORKFLOW for Efficient Local Adjustments:**
+
+1. **Create Related Nodes**: When adding nodes that should stay together (service + database, component + label)
+2. **Bind Immediately**: Use `bind_nodes` right after creating related nodes
+3. **Check Bindings**: Use `list_cells` to see which nodes are bound (shows `[BOUND to: ...]`)
+4. **Get Suggestions**: Use `suggest_bindings` to discover which existing nodes should be bound
+5. **Make Local Adjustments**: Use `move_shape` on just ONE node - all bound nodes move automatically!
 
 **Basic workflow:**
 1. Use `bind_nodes` to bind multiple nodes together
 2. Use `move_shape` to move one node - all bound nodes move together
 3. Use `get_bound_nodes` to check which nodes are bound together
-4. Use `unbind_nodes` to break the binding relationship
+4. Use `suggest_bindings` to get intelligent binding recommendations
+5. Use `unbind_nodes` to break the binding relationship if needed
 
 **Examples:**
 ```python
+# EFFICIENT WORKFLOW: Create and bind related nodes together
+auth_service = add_shape("Auth Service", x=100, y=100)
+auth_db = add_shape("Auth DB", x=100, y=200)
+bind_nodes(node_ids=[auth_service, auth_db])  # Bind immediately!
+
+# NOW when you need to adjust position - move just ONE node:
+move_shape(shape_id=auth_service, new_x=300, new_y=100)
+# ✓ Both Auth Service AND Auth DB move together automatically!
+
+# Get intelligent binding suggestions for existing diagrams
+suggest_bindings()
+# Output:
+# 💡 Suggested 3 new binding(s):
+# 1. Bind 'User Service' (shape_3) with 'User DB' (shape_4)
+#    Score: 130/100
+#    Reasons: proximity: 50%, vertically aligned, naming pattern: same prefix 'User'
+#    → To bind: bind_nodes(node_ids=['shape_3', 'shape_4'])
+
+# Check current bindings in the diagram
+list_cells()
+# Shows: [BOUND to: shape_2] for bound nodes
+
 # Bind three nodes together to form a group
 bind_nodes(node_ids=["shape_1", "shape_2", "shape_3"])
 
@@ -351,17 +393,69 @@ get_bound_nodes(node_id="shape_1")
 # Unbind a specific node
 unbind_nodes(node_ids=["shape_2"])
 # Now shape_1 and shape_3 are still bound, but shape_2 is independent
-
-# Unbind all nodes
-unbind_nodes(node_ids=["shape_1", "shape_3"])
 ```
 
 **Use cases:**
-- Moving related components together (e.g., a microservice and its database)
-- Maintaining layout relationships when reorganizing diagrams
-- Creating composite elements that should stay together
+- ✅ **Local adjustments**: Move groups of related nodes efficiently
+- ✅ **Microservices architectures**: Bind service + database pairs
+- ✅ **Component diagrams**: Bind components with their labels/descriptions
+- ✅ **Maintaining layout**: Keep related elements together when reorganizing
+- ✅ **Reducing edits**: Edit 1 node instead of 5+ individual nodes
+
+**Benefits:**
+- 🎯 **Efficiency**: Make local adjustments with minimal edits
+- 🔧 **Precision**: Change only what needs to change
+- 📊 **Organization**: Keep related nodes together automatically
+- ⚡ **Speed**: One move command instead of multiple individual updates
 
 **Note:** Bindings are preserved in the .drawio XML format using custom attributes.
+
+### Line Crossing Detection / 连线交叉检测
+
+The `detect_line_crossings` tool automatically detects when connections (lines/edges) in your diagram cross each other and provides position hints to help improve the layout.
+
+**How it works:**
+1. Analyzes all connections in the diagram
+2. Detects intersection points between connection lines
+3. Provides specific suggestions for fixing each crossing
+
+**Output includes:**
+- IDs and labels of crossing connections
+- Exact intersection point coordinates (x, y)
+- Multiple suggestions for fixing each crossing:
+  - Add waypoints to route connections around each other
+  - Reposition shapes to avoid crossings
+  - Adjust entry/exit points to change connection angles
+
+**Example usage:**
+```python
+# After creating a diagram with connections
+detect_line_crossings()
+
+# Example output:
+# Detected 2 line crossing(s):
+#
+# 1. Crossing between:
+#    - Connection 'Read Cache' (ID: conn_5)
+#    - Connection 'Query DB' (ID: conn_6)
+#    Lines cross at (260.0, 180.0). Consider these adjustments:
+#      1. Add waypoints to 'Read Cache' to route around the crossing
+#      2. Add waypoints to 'Query DB' to route around the crossing
+#      3. Reposition shapes connected by 'Read Cache' to avoid crossing
+#      4. Reposition shapes connected by 'Query DB' to avoid crossing
+#      5. Adjust entry/exit points to change connection angles
+```
+
+**Use cases:**
+- Automatically validate diagram layouts before finalizing
+- Get suggestions for improving diagram clarity
+- Help AI models make better layout decisions
+- Identify problem areas in complex diagrams
+
+**Benefits:**
+- Improves diagram readability by highlighting crossed lines
+- Provides actionable suggestions for AI models to auto-fix layouts
+- Works with both simple direct connections and complex routed connections
 
 ### Creation Tools / 创建工具
 
