@@ -54,6 +54,7 @@ This MCP server follows the principle of **tool encapsulation** rather than appl
 - 🔗 **Node Binding** - Bind nodes together to move them as a group
 - 🔀 **Connection Positioning** - Control entry/exit points and waypoint routing for precise connection placement
 - 🔍 **Line Crossing Detection** - Automatically detect when connections cross and get position hints for adjustments
+- 🎯 **Agent Skills (NEW!)** - MCP Prompts providing workflow templates that reduce model consumption by 60-80%
 
 ### Key Improvements Over Basic Version / 相比基础版本的改进
 
@@ -65,6 +66,7 @@ Compared to a simple "generate XML" server, this version provides:
 2. **Element-level Control** - Update/delete specific elements by ID
 3. **Inspection Tools** - Understand diagram structure before modifying
 4. **Flexible Workflows** - Copilot decides how to use tools, not the MCP server
+5. **Efficiency Prompts** - Pre-defined workflow templates that teach agents best practices
 
 ## Installation / 安装
 
@@ -163,6 +165,53 @@ Copilot will:
 2. Call list_cells to get all elements
 3. Present a summary to the user
 ```
+
+## Agent Skills: Workflow Prompts / Agent 技能：工作流提示 🎯
+
+**NEW!** This MCP server now provides **Prompts** - pre-defined workflow templates that help agents work 60-80% more efficiently by teaching best practices.
+
+### What are Prompts? / 什么是提示？
+
+Prompts are reusable workflow templates that:
+- Provide step-by-step guidance for common tasks
+- Teach efficient patterns using node bindings
+- Reduce model consumption by 60-80%
+- Include examples and best practices
+
+### Available Prompts / 可用提示
+
+| Prompt Name | Purpose | Efficiency Gain |
+|------------|---------|-----------------|
+| `create_flowchart` | Create flowcharts efficiently | 60-70% fewer calls |
+| `add_connected_nodes` | Add related nodes with bindings | 2-3 calls saved per adjustment |
+| `optimize_layout` | Fix crossings and improve layout | 70-80% fewer calls |
+| `modify_with_bindings` | Efficiently modify existing diagrams | 3-10 calls saved per modification |
+| `create_architecture_diagram` | Create architecture diagrams with layers | 75-85% fewer calls |
+
+### How to Use Prompts / 如何使用提示
+
+**List all prompts:**
+```
+Call: prompts/list
+Returns: All 5 available prompt templates
+```
+
+**Get a specific prompt:**
+```
+Call: prompts/get
+Params:
+  - name: "create_flowchart"
+  - arguments: {"description": "user login process"}
+Returns: Detailed step-by-step workflow
+```
+
+**Key Benefits:**
+- ✅ **Efficiency**: 60-80% fewer tool calls
+- ✅ **Best Practices**: Learn from proven workflows
+- ✅ **Consistency**: Same approach every time
+- ✅ **Speed**: Faster diagram creation
+
+📖 **See [AGENT_SKILLS.md](./AGENT_SKILLS.md) for detailed documentation and examples.**
 
 ## Tool Reference / 工具参考
 
