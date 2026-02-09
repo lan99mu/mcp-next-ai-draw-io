@@ -137,7 +137,7 @@ async def list_tools() -> list[Tool]:
         ),
         Tool(
             name="list_cells",
-            description="List all cells (shapes and connections) in the diagram with their IDs, labels, and types. Useful for understanding the diagram structure before making modifications.",
+            description="List all cells (shapes and connections) in the diagram with their IDs, labels, types, and BINDING information. Shows which nodes are bound together (moving as a group). IMPORTANT: Check bindings before making changes - if nodes are bound, you only need to adjust ONE node and all bound nodes move together automatically. This is KEY for efficient local adjustments.",
             inputSchema={
                 "type": "object",
                 "properties": {}
@@ -353,7 +353,7 @@ async def list_tools() -> list[Tool]:
         ),
         Tool(
             name="bind_nodes",
-            description="Bind multiple nodes together so they move as a group. When you move one node in a bound group, all bound nodes will move together by the same offset.",
+            description="Bind multiple nodes together so they move as a group. When you move one node in a bound group, all bound nodes will move together by the same offset. USE THIS when nodes are logically related (e.g., a service and its database, a component and its label). This enables EFFICIENT LOCAL ADJUSTMENTS - you only need to move ONE node instead of multiple nodes individually. BEST PRACTICE: Bind related nodes immediately after creating them.",
             inputSchema={
                 "type": "object",
                 "properties": {
@@ -397,7 +397,7 @@ async def list_tools() -> list[Tool]:
         ),
         Tool(
             name="move_shape",
-            description="Move a shape to a new position. If the shape is bound to other nodes, all bound nodes will also move by the same offset.",
+            description="Move a shape to a new position. If the shape is bound to other nodes, all bound nodes will also move by the same offset AUTOMATICALLY. This is the PREFERRED way to make local adjustments to groups of related nodes. Check list_cells output to see which nodes are bound before moving.",
             inputSchema={
                 "type": "object",
                 "properties": {
@@ -423,6 +423,20 @@ async def list_tools() -> list[Tool]:
             inputSchema={
                 "type": "object",
                 "properties": {}
+            }
+        ),
+        Tool(
+            name="suggest_bindings",
+            description="Analyze the diagram and suggest which nodes should be bound together based on proximity, naming patterns, and connections. Use this to identify related nodes that should move as a group for efficient local adjustments. Helps you discover opportunities to use bindings instead of editing many nodes individually.",
+            inputSchema={
+                "type": "object",
+                "properties": {
+                    "proximity_threshold": {
+                        "type": "number",
+                        "description": "Maximum distance (in pixels) between nodes to consider them related. Default is 200.",
+                        "default": 200
+                    }
+                }
             }
         ),
         Tool(
@@ -580,6 +594,11 @@ async def call_tool(name: str, arguments: Any) -> list[TextContent]:
                 center_x = x + width / 2
                 center_y = y + height / 2
                 pos = f"at ({x}, {y}), size ({width}x{height}), center ({center_x}, {center_y})"
+                
+                # Show binding information prominently
+                bound_nodes = cell.get('bound_nodes', [])
+                if bound_nodes:
+                    pos += f" [BOUND to: {', '.join(bound_nodes)}]"
             elif cell['edge']:
                 pos = f"from {cell['source']} to {cell['target']}"
             else:
@@ -927,6 +946,169 @@ async def call_tool(name: str, arguments: Any) -> list[TextContent]:
             result_parts.append(f"   - Connection '{crossing['connection1_label']}' (ID: {crossing['connection1_id']})")
             result_parts.append(f"   - Connection '{crossing['connection2_label']}' (ID: {crossing['connection2_id']})")
             result_parts.append(f"   {crossing['suggestion']}")
+        
+        return [TextContent(
+            type="text",
+            text="\n".join(result_parts)
+        )]
+    
+    elif name == "suggest_bindings":
+        if current_xml:
+            cells = get_cells_from_xml(current_xml)
+        elif current_diagram:
+            xml_content = current_diagram.to_drawio_xml()
+            cells = get_cells_from_xml(xml_content)
+        else:
+            return [TextContent(
+                type="text",
+                text="No diagram available. Create a new diagram or load an existing one."
+            )]
+        
+        proximity_threshold = arguments.get("proximity_threshold", 200)
+        
+        # Get all shapes
+        shapes = [cell for cell in cells if cell.get('vertex')]
+        
+        if len(shapes) < 2:
+            return [TextContent(
+                type="text",
+                text="Not enough shapes in the diagram to suggest bindings. Need at least 2 shapes."
+            )]
+        
+        # Analyze and suggest bindings
+        suggestions = []
+        already_bound = set()
+        
+        for i, shape1 in enumerate(shapes):
+            for shape2 in shapes[i + 1:]:
+                shape1_id = shape1['id']
+                shape2_id = shape2['id']
+                
+                # Skip if already bound to each other
+                bound_nodes_1 = shape1.get('bound_nodes', [])
+                bound_nodes_2 = shape2.get('bound_nodes', [])
+                if shape2_id in bound_nodes_1 or shape1_id in bound_nodes_2:
+                    pair_key = tuple(sorted([shape1_id, shape2_id]))
+                    already_bound.add(pair_key)
+                    continue
+                
+                # Calculate distance between centers
+                x1 = safe_float(shape1.get('x', 0))
+                y1 = safe_float(shape1.get('y', 0))
+                w1 = safe_float(shape1.get('width', 120))
+                h1 = safe_float(shape1.get('height', 60))
+                center1_x = x1 + w1 / 2
+                center1_y = y1 + h1 / 2
+                
+                x2 = safe_float(shape2.get('x', 0))
+                y2 = safe_float(shape2.get('y', 0))
+                w2 = safe_float(shape2.get('width', 120))
+                h2 = safe_float(shape2.get('height', 60))
+                center2_x = x2 + w2 / 2
+                center2_y = y2 + h2 / 2
+                
+                distance = ((center2_x - center1_x) ** 2 + (center2_y - center1_y) ** 2) ** 0.5
+                
+                # Check if nodes are close enough
+                if distance <= proximity_threshold:
+                    label1 = shape1.get('value', shape1_id)
+                    label2 = shape2.get('value', shape2_id)
+                    
+                    # Calculate reason score based on various factors
+                    reasons = []
+                    score = 0
+                    
+                    # Proximity score
+                    proximity_score = int((1 - distance / proximity_threshold) * 100)
+                    reasons.append(f"proximity: {proximity_score}% (distance: {distance:.1f}px)")
+                    score += proximity_score
+                    
+                    # Vertical alignment (same or close X position)
+                    if abs(center1_x - center2_x) < 50:
+                        reasons.append("vertically aligned")
+                        score += 20
+                    
+                    # Horizontal alignment (same or close Y position)
+                    if abs(center1_y - center2_y) < 50:
+                        reasons.append("horizontally aligned")
+                        score += 20
+                    
+                    # Check for naming patterns suggesting relationship
+                    label1_lower = label1.lower()
+                    label2_lower = label2.lower()
+                    
+                    # Same prefix (e.g., "Service A" and "DB A")
+                    label1_words = label1.split()
+                    label2_words = label2.split()
+                    if label1_words and label2_words:
+                        if label1_words[-1] == label2_words[-1]:  # Same suffix
+                            reasons.append(f"naming pattern: same suffix '{label1_words[-1]}'")
+                            score += 30
+                        elif label1_words[0] == label2_words[0]:  # Same prefix
+                            reasons.append(f"naming pattern: same prefix '{label1_words[0]}'")
+                            score += 25
+                    
+                    # Related keywords
+                    related_pairs = [
+                        ('service', 'db'), ('service', 'database'),
+                        ('api', 'db'), ('api', 'database'),
+                        ('app', 'db'), ('app', 'database'),
+                        ('frontend', 'backend'),
+                        ('client', 'server'),
+                        ('cache', 'db'), ('cache', 'database')
+                    ]
+                    
+                    for word1, word2 in related_pairs:
+                        if (word1 in label1_lower and word2 in label2_lower) or \
+                           (word2 in label1_lower and word1 in label2_lower):
+                            reasons.append(f"related keywords: '{word1}' and '{word2}'")
+                            score += 35
+                            break
+                    
+                    # Only suggest if score is reasonable
+                    if score >= 50:
+                        suggestions.append({
+                            'id1': shape1_id,
+                            'id2': shape2_id,
+                            'label1': label1,
+                            'label2': label2,
+                            'score': score,
+                            'reasons': reasons,
+                            'distance': distance
+                        })
+        
+        # Sort by score (highest first)
+        suggestions.sort(key=lambda x: x['score'], reverse=True)
+        
+        # Format output
+        if not suggestions and not already_bound:
+            return [TextContent(
+                type="text",
+                text=f"No binding suggestions found. No shapes are within {proximity_threshold}px of each other or have clear relationships."
+            )]
+        
+        result_parts = []
+        
+        if already_bound:
+            result_parts.append(f"✓ Found {len(already_bound)} existing binding(s):")
+            for pair in sorted(already_bound):
+                result_parts.append(f"  - {pair[0]} and {pair[1]} are already bound")
+            result_parts.append("")
+        
+        if suggestions:
+            result_parts.append(f"💡 Suggested {len(suggestions)} new binding(s) for efficient local adjustments:\n")
+            
+            for i, suggestion in enumerate(suggestions[:10], 1):  # Limit to top 10
+                result_parts.append(f"{i}. Bind '{suggestion['label1']}' ({suggestion['id1']}) with '{suggestion['label2']}' ({suggestion['id2']})")
+                result_parts.append(f"   Score: {suggestion['score']}/100")
+                result_parts.append(f"   Reasons: {', '.join(suggestion['reasons'])}")
+                result_parts.append(f"   → To bind: bind_nodes(node_ids=['{suggestion['id1']}', '{suggestion['id2']}'])")
+                result_parts.append("")
+            
+            if len(suggestions) > 10:
+                result_parts.append(f"... and {len(suggestions) - 10} more suggestions with lower scores")
+            
+            result_parts.append("\n✨ TIP: After binding, use move_shape() on just ONE node - all bound nodes move automatically!")
         
         return [TextContent(
             type="text",
