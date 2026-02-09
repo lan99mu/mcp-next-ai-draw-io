@@ -1,5 +1,9 @@
 # MCP Draw.io 服务器
 
+> ⚠️ **需要 Python 3.10 或更高版本**
+> 
+> 此包需要 Python 3.10 或更高版本。如果您看到类似 "No matching distribution found for mcp>=1.23.0" 的错误，请先升级您的 Python 版本。
+
 基于 Python 的 Model Context Protocol (MCP) 服务器，提供**简洁、专注的工具**来操作 Draw.io 图表。
 
 [English](./README.md) | 中文

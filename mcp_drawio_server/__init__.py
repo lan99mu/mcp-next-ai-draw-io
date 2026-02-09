@@ -3,7 +3,19 @@ MCP Draw.io Server Package
 
 A Model Context Protocol (MCP) server that provides tools for creating and 
 manipulating Draw.io diagrams.
+
+Requires Python 3.10 or higher.
 """
+
+import sys
+
+# Check Python version at import time to provide a clear error message
+if sys.version_info < (3, 10):
+    raise RuntimeError(
+        f"mcp-drawio-server requires Python 3.10 or higher. "
+        f"You are using Python {sys.version_info.major}.{sys.version_info.minor}. "
+        f"Please upgrade your Python installation."
+    )
 
 from .server import main
 from .diagram import Diagram
