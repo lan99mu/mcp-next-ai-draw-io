@@ -54,7 +54,8 @@ This MCP server follows the principle of **tool encapsulation** rather than appl
 - 🔗 **Node Binding** - Bind nodes together to move them as a group
 - 🔀 **Connection Positioning** - Control entry/exit points and waypoint routing for precise connection placement
 - 🔍 **Line Crossing Detection** - Automatically detect when connections cross and get position hints for adjustments
-- 🎯 **Agent Skills (NEW!)** - MCP Prompts providing workflow templates that reduce model consumption by 60-80%
+- 🎯 **Agent Skills** - MCP Prompts providing workflow templates that reduce model consumption by 60-80%
+- ⚡ **Context Optimization (NEW!)** - 62% reduction in context consumption with on-demand detailed documentation
 
 ### Key Improvements Over Basic Version / 相比基础版本的改进
 
@@ -67,6 +68,7 @@ Compared to a simple "generate XML" server, this version provides:
 3. **Inspection Tools** - Understand diagram structure before modifying
 4. **Flexible Workflows** - Copilot decides how to use tools, not the MCP server
 5. **Efficiency Prompts** - Pre-defined workflow templates that teach agents best practices
+6. **Context Optimization** - Concise tool descriptions with detailed docs on-demand
 
 ## Installation / 安装
 
@@ -212,6 +214,52 @@ Returns: Detailed step-by-step workflow
 - ✅ **Speed**: Faster diagram creation
 
 📖 **See [AGENT_SKILLS.md](./AGENT_SKILLS.md) for detailed documentation and examples.**
+
+## On-Demand Documentation: MCP Resources / 按需文档：MCP 资源 ⚡
+
+**NEW!** This server provides detailed documentation via MCP Resources, reducing initial context consumption by **62%** while keeping comprehensive docs available on-demand.
+
+### Context Optimization / 上下文优化
+
+**Problem:** Verbose tool descriptions consumed too many tokens in VS Code Copilot's context.
+
+**Solution:** 
+- **Concise tool descriptions** - Only essential info (1,010 chars vs 2,669 chars previously)
+- **Detailed docs on-demand** - Access comprehensive guides when needed (15,546 chars available)
+
+### Available Resources / 可用资源
+
+| Resource URI | Content | Size |
+|-------------|---------|------|
+| `docs://tools/overview` | Complete tool documentation with examples | 4,961 chars |
+| `docs://bindings/guide` | Node bindings guide with efficiency patterns | 3,651 chars |
+| `docs://workflows/best-practices` | Workflow patterns and best practices | 3,710 chars |
+| `docs://shapes/reference` | All shape types with usage examples | 3,224 chars |
+
+### How to Access / 如何访问
+
+**List available resources:**
+```
+MCP Call: resources/list
+```
+
+**Read a specific resource:**
+```
+MCP Call: resources/read
+URI: docs://bindings/guide
+```
+
+**Via Copilot Chat:**
+Simply ask: "Show me the bindings guide" or "What are best practices?"
+
+### Benefits / 优势
+
+- ✅ **62% reduction** in initial context consumption
+- ✅ **Detailed docs** - More comprehensive than before
+- ✅ **On-demand** - Only loaded when needed
+- ✅ **Lower costs** - Fewer tokens per request
+
+📖 **See [CONTEXT_OPTIMIZATION.md](./CONTEXT_OPTIMIZATION.md) for complete details.**
 
 ## Tool Reference / 工具参考
 
