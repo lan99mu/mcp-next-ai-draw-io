@@ -607,23 +607,47 @@ detect_line_crossings()
 运行测试套件：
 
 ```bash
-# 基本功能测试
-python test_functionality.py
+# 使用 pytest 运行所有测试
+python -m pytest tests/ -v
 
-# 文件操作测试
-python test_file_operations.py
+# 运行特定测试文件
+python -m pytest tests/test_functionality.py -v
 ```
 
 ## 项目结构
 
 ```
 mcp-next-ai-draw-io/
-├── mcp_drawio_server.py      # 主 MCP 服务器
-├── test_functionality.py      # 基本测试
-├── test_file_operations.py    # 文件操作测试
-├── pyproject.toml             # 项目配置
-├── requirements.txt           # 依赖
-└── README.md                  # 英文文档
+├── mcp_drawio_server/           # 主 MCP 服务器包
+│   ├── __init__.py
+│   ├── __main__.py              # CLI 入口
+│   ├── server.py                # 服务器初始化
+│   ├── tools.py                 # 工具定义
+│   ├── prompts.py               # MCP 提示
+│   ├── resources.py             # MCP 资源
+│   ├── docs_content.py          # 文档内容
+│   ├── diagram.py               # 图表模型
+│   ├── xml_operations.py        # XML 解析/操作
+│   ├── file_operations.py       # 文件 I/O
+│   ├── crossing_detector.py     # 线条交叉检测
+│   └── handlers/                # 工具调用处理器
+│       ├── __init__.py
+│       ├── state.py             # 图表状态管理
+│       ├── file_handlers.py     # 文件操作处理器
+│       ├── cell_handlers.py     # 单元操作处理器
+│       ├── binding_handlers.py  # 绑定操作处理器
+│       └── analysis_handlers.py # 分析处理器
+├── tests/                       # 测试套件
+│   ├── test_functionality.py
+│   ├── test_file_operations.py
+│   └── ... (其他测试)
+├── demo/                        # 演示脚本和示例
+│   ├── demo.py
+│   ├── quick_example.py
+│   └── ... (其他演示)
+├── pyproject.toml               # 项目配置
+├── requirements.txt             # 依赖
+└── README.md                    # 英文文档
 ```
 
 ## 为什么这样设计？

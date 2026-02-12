@@ -613,23 +613,47 @@ Custom shapes can be used via the `style` parameter with Draw.io style strings.
 Run the test suite:
 
 ```bash
-# Basic functionality tests
-python test_functionality.py
+# Run all tests with pytest
+python -m pytest tests/ -v
 
-# File operations tests
-python test_file_operations.py
+# Run specific test file
+python -m pytest tests/test_functionality.py -v
 ```
 
 ## Project Structure / 项目结构
 
 ```
 mcp-next-ai-draw-io/
-├── mcp_drawio_server.py      # Main MCP server
-├── test_functionality.py      # Basic tests
-├── test_file_operations.py    # File operation tests
-├── pyproject.toml             # Project config
-├── requirements.txt           # Dependencies
-└── README.md                  # This file
+├── mcp_drawio_server/           # Main MCP server package
+│   ├── __init__.py
+│   ├── __main__.py              # CLI entry point
+│   ├── server.py                # Server initialization
+│   ├── tools.py                 # Tool definitions
+│   ├── prompts.py               # MCP prompts
+│   ├── resources.py             # MCP resources
+│   ├── docs_content.py          # Documentation content
+│   ├── diagram.py               # Diagram model
+│   ├── xml_operations.py        # XML parsing/manipulation
+│   ├── file_operations.py       # File I/O
+│   ├── crossing_detector.py     # Line crossing detection
+│   └── handlers/                # Tool call handlers
+│       ├── __init__.py
+│       ├── state.py             # Diagram state management
+│       ├── file_handlers.py     # File operation handlers
+│       ├── cell_handlers.py     # Cell operation handlers
+│       ├── binding_handlers.py  # Binding operation handlers
+│       └── analysis_handlers.py # Analysis handlers
+├── tests/                       # Test suite
+│   ├── test_functionality.py
+│   ├── test_file_operations.py
+│   └── ... (other tests)
+├── demo/                        # Demo scripts and examples
+│   ├── demo.py
+│   ├── quick_example.py
+│   └── ... (other demos)
+├── pyproject.toml               # Project config
+├── requirements.txt             # Dependencies
+└── README.md                    # This file
 ```
 
 ## Why This Design? / 为什么这样设计？
