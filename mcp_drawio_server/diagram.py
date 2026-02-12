@@ -10,6 +10,14 @@ from datetime import datetime, timezone
 from .models import Shape, Connection
 
 
+# Text size calculation constants
+CHAR_WIDTH_RATIO = 0.6  # Approximate character width as ratio of font size
+LINE_HEIGHT_RATIO = 1.4  # Line height as ratio of font size
+
+# UML diagram constants
+UML_SECTION_SEPARATOR = "───────"  # Unicode box drawing for UML section dividers
+
+
 def _format_number(value: float) -> str:
     """
     Format a number for XML output, using int format if it's a whole number.
@@ -135,9 +143,9 @@ class Diagram:
         max_line_length = max(len(line) for line in lines) if lines else 0
         num_lines = len(lines)
         
-        # Approximate character width (depends on font, this is an estimate)
-        char_width = font_size * 0.6
-        line_height = font_size * 1.4
+        # Calculate character dimensions using constants
+        char_width = font_size * CHAR_WIDTH_RATIO
+        line_height = font_size * LINE_HEIGHT_RATIO
         
         # Base padding (varies by shape type)
         padding_h = 20
@@ -485,3 +493,158 @@ class Diagram:
             "uml_note": "shape=note;whiteSpace=wrap;html=1;backgroundOutline=1;darkOpacity=0.05;size=15;",
         }
         return styles.get(shape_type, styles["rectangle"])
+    
+    def add_uml_class(
+        self,
+        name: str,
+        attributes: list[str] = None,
+        methods: list[str] = None,
+        x: float = 0,
+        y: float = 0,
+        width: float = 160,
+        height: Optional[float] = None,
+        class_type: str = "class",
+        auto_bind: bool = True
+    ) -> dict[str, str]:
+        """Add a UML class with proper sections, auto-sized and auto-bound.
+        
+        This creates a UML class diagram box with properly formatted sections
+        for name, attributes, and methods. The height is auto-calculated based
+        on content, and all parts are automatically bound together.
+        
+        Args:
+            name: Class name (e.g., "User", "«interface»\\nIService")
+            attributes: List of attribute strings (e.g., ["- id: int", "+ name: string"])
+            methods: List of method strings (e.g., ["+ login()", "+ logout()"])
+            x, y: Position coordinates
+            width: Width of the class box (default: 160)
+            height: Height (auto-calculated if not provided)
+            class_type: Type of UML class ("class", "interface", "abstract", "enum")
+            auto_bind: Whether to bind the class parts together (default: True)
+            
+        Returns:
+            Dictionary with keys 'class_id' for the main shape ID
+        """
+        attributes = attributes or []
+        methods = methods or []
+        
+        # Map class_type to shape_type
+        shape_type_map = {
+            "class": "uml_class",
+            "interface": "uml_interface",
+            "abstract": "uml_abstract_class",
+            "enum": "uml_enum"
+        }
+        shape_type = shape_type_map.get(class_type, "uml_class")
+        
+        # Build label with sections
+        sections = [name]
+        
+        if attributes:
+            sections.append(UML_SECTION_SEPARATOR)
+            sections.extend(attributes)
+        
+        if methods:
+            sections.append(UML_SECTION_SEPARATOR)
+            sections.extend(methods)
+        
+        label = "\n".join(sections)
+        
+        # Auto-calculate height if not provided
+        if height is None:
+            line_count = len(sections)
+            header_height = 26  # Header section
+            line_height = 20   # Each line
+            height = header_height + (line_count * line_height)
+            height = max(height, 60)  # Minimum height
+        
+        # Create the main class shape
+        class_id = self.add_shape(
+            label=label,
+            x=x,
+            y=y,
+            width=width,
+            height=height,
+            shape_type=shape_type
+        )
+        
+        return {"class_id": class_id}
+    
+    def add_swimlane_pool(
+        self,
+        name: str,
+        lanes: list[str],
+        x: float = 0,
+        y: float = 0,
+        pool_width: float = 800,
+        lane_height: float = 200,
+        horizontal: bool = True
+    ) -> dict[str, str]:
+        """Add a swimlane pool with multiple lanes.
+        
+        Creates a swimlane pool container with the specified lanes. All lanes
+        are automatically bound together for easy repositioning.
+        
+        Args:
+            name: Name of the pool
+            lanes: List of lane names
+            x, y: Position of the pool
+            pool_width: Total width of the pool
+            lane_height: Height of each lane
+            horizontal: If True, lanes are horizontal (stacked vertically)
+            
+        Returns:
+            Dictionary with 'pool_id' and 'lane_ids' list
+        """
+        pool_height = lane_height * len(lanes) + 30  # 30 for header
+        
+        # Create pool container
+        pool_id = self.add_shape(
+            label=name,
+            x=x,
+            y=y,
+            width=pool_width,
+            height=pool_height,
+            shape_type="swimlane_pool"
+        )
+        
+        # Create lanes
+        lane_ids = []
+        lane_y_offset = 30  # After pool header
+        
+        for i, lane_name in enumerate(lanes):
+            lane_shape_type = "swimlane_h" if horizontal else "swimlane_v"
+            lane_id = self.add_shape(
+                label=lane_name,
+                x=0,  # Relative to pool
+                y=lane_y_offset + (i * lane_height),
+                width=pool_width,
+                height=lane_height,
+                shape_type=lane_shape_type,
+                parent_id=pool_id
+            )
+            lane_ids.append(lane_id)
+        
+        # Bind all lanes together with the pool
+        all_ids = [pool_id] + lane_ids
+        for i, shape_id in enumerate(all_ids):
+            other_ids = [sid for sid in all_ids if sid != shape_id]
+            self.shapes[shape_id].bound_nodes = list(
+                set(self.shapes[shape_id].bound_nodes + other_ids)
+            )
+        
+        return {"pool_id": pool_id, "lane_ids": lane_ids}
+    
+    def bind_shapes(self, shape_ids: list[str]) -> None:
+        """Bind multiple shapes together so they move as a group.
+        
+        Args:
+            shape_ids: List of shape IDs to bind together
+        """
+        for shape_id in shape_ids:
+            if shape_id not in self.shapes:
+                continue
+            other_ids = [sid for sid in shape_ids if sid != shape_id]
+            self.shapes[shape_id].bound_nodes = list(
+                set(self.shapes[shape_id].bound_nodes + other_ids)
+            )

@@ -27,7 +27,7 @@ def test_shape_dashed_border():
     
     # Verify shape was created correctly
     assert shape_id in diagram.shapes
-    assert diagram.shapes[shape_id].dashed == True
+    assert diagram.shapes[shape_id].dashed is True
 
 
 def test_shape_rounded_corners():
@@ -133,7 +133,7 @@ def test_connection_dashed_line():
     
     # Verify dashed style is applied to connection
     assert "dashed=1" in xml
-    assert diagram.connections[conn_id].dashed == True
+    assert diagram.connections[conn_id].dashed is True
 
 
 def test_connection_rounded_orthogonal():
@@ -358,6 +358,98 @@ def test_parent_child_relationship():
     assert diagram.shapes[child_id].parent_id == container_id
 
 
+def test_add_uml_class_helper():
+    """Test the add_uml_class helper method."""
+    diagram = Diagram("UML Class Helper Test")
+    
+    # Create a UML class using the helper
+    result = diagram.add_uml_class(
+        name="User",
+        attributes=["- id: int", "- name: string", "- email: string"],
+        methods=["+ login()", "+ logout()", "+ getProfile()"],
+        x=100, y=100,
+        width=180
+    )
+    
+    assert "class_id" in result
+    assert result["class_id"] in diagram.shapes
+    
+    shape = diagram.shapes[result["class_id"]]
+    assert shape.shape_type == "uml_class"
+    assert "User" in shape.label
+    assert "- id: int" in shape.label
+    assert "+ login()" in shape.label
+    # Height should be auto-calculated
+    assert shape.height > 100  # Should be larger due to content
+
+
+def test_add_uml_class_interface():
+    """Test the add_uml_class helper for interfaces."""
+    diagram = Diagram("UML Interface Helper Test")
+    
+    result = diagram.add_uml_class(
+        name="«interface»\nIService",
+        methods=["+ execute()", "+ validate()"],
+        x=100, y=100,
+        class_type="interface"
+    )
+    
+    shape = diagram.shapes[result["class_id"]]
+    assert shape.shape_type == "uml_interface"
+    assert "IService" in shape.label
+    assert "+ execute()" in shape.label
+
+
+def test_add_swimlane_pool():
+    """Test the add_swimlane_pool helper method."""
+    diagram = Diagram("Swimlane Pool Test")
+    
+    result = diagram.add_swimlane_pool(
+        name="Order Process",
+        lanes=["Customer", "Sales", "Warehouse"],
+        x=50, y=50,
+        pool_width=700,
+        lane_height=150
+    )
+    
+    assert "pool_id" in result
+    assert "lane_ids" in result
+    assert len(result["lane_ids"]) == 3
+    
+    # Verify pool was created
+    pool = diagram.shapes[result["pool_id"]]
+    assert pool.shape_type == "swimlane_pool"
+    assert pool.label == "Order Process"
+    
+    # Verify lanes were created with parent relationship
+    for lane_id in result["lane_ids"]:
+        lane = diagram.shapes[lane_id]
+        assert lane.parent_id == result["pool_id"]
+    
+    # Verify bindings
+    assert len(pool.bound_nodes) == 3  # Bound to all 3 lanes
+
+
+def test_bind_shapes_helper():
+    """Test the bind_shapes helper method."""
+    diagram = Diagram("Bind Shapes Test")
+    
+    shape1 = diagram.add_shape("A", x=100, y=100)
+    shape2 = diagram.add_shape("B", x=200, y=100)
+    shape3 = diagram.add_shape("C", x=300, y=100)
+    
+    # Bind the shapes
+    diagram.bind_shapes([shape1, shape2, shape3])
+    
+    # Verify all shapes are bound to each other
+    assert shape2 in diagram.shapes[shape1].bound_nodes
+    assert shape3 in diagram.shapes[shape1].bound_nodes
+    assert shape1 in diagram.shapes[shape2].bound_nodes
+    assert shape3 in diagram.shapes[shape2].bound_nodes
+    assert shape1 in diagram.shapes[shape3].bound_nodes
+    assert shape2 in diagram.shapes[shape3].bound_nodes
+
+
 if __name__ == "__main__":
     print("Testing Style and Polyline Support")
     print("=" * 50)
@@ -408,6 +500,19 @@ if __name__ == "__main__":
     test_parent_child_relationship()
     print("✓ test_parent_child_relationship passed")
     
+    test_add_uml_class_helper()
+    print("✓ test_add_uml_class_helper passed")
+    
+    test_add_uml_class_interface()
+    print("✓ test_add_uml_class_interface passed")
+    
+    test_add_swimlane_pool()
+    print("✓ test_add_swimlane_pool passed")
+    
+    test_bind_shapes_helper()
+    print("✓ test_bind_shapes_helper passed")
+    
     print("\n" + "=" * 50)
     print("✓ All style and polyline tests passed!")
     print("=" * 50)
+
