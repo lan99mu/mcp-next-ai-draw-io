@@ -13,8 +13,6 @@ from .file_handlers import (
     handle_create_diagram,
     handle_load_diagram,
     handle_save_diagram,
-    handle_get_diagram_xml,
-    handle_set_diagram_xml,
 )
 from .cell_handlers import (
     handle_list_cells,
@@ -46,10 +44,6 @@ async def handle_tool_call(name: str, arguments: Any) -> list[TextContent]:
         return handle_load_diagram(arguments)
     elif name == "save_diagram":
         return handle_save_diagram(arguments)
-    elif name == "get_diagram_xml":
-        return handle_get_diagram_xml(arguments)
-    elif name == "set_diagram_xml":
-        return handle_set_diagram_xml(arguments)
     
     # Cell operations
     elif name == "list_cells":

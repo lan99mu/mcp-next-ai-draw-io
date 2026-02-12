@@ -2,8 +2,11 @@
 """
 File operation handlers.
 
-Handlers for create_diagram, load_diagram, save_diagram,
-get_diagram_xml, and set_diagram_xml tools.
+Handlers for create_diagram, load_diagram, and save_diagram tools.
+
+Note: The _handle_get_diagram_xml and _handle_set_diagram_xml functions are 
+internal helpers and are NOT exposed as public tools. Direct XML manipulation
+is discouraged - use the high-level tools (add_shape, add_connection, etc.) instead.
 """
 
 from typing import Any
@@ -39,7 +42,7 @@ def handle_load_diagram(arguments: Any) -> list[TextContent]:
         
         return [TextContent(
             type="text",
-            text=f"Loaded diagram from: {file_path}\n\nDiagram contains:\n- {vertex_count} shapes\n- {edge_count} connections\n- {len(cells)} total cells\n\nUse list_cells to see all elements, or get_diagram_xml to see the full XML."
+            text=f"Loaded diagram from: {file_path}\n\nDiagram contains:\n- {vertex_count} shapes\n- {edge_count} connections\n- {len(cells)} total cells\n\nUse list_cells to see all elements."
         )]
     except FileNotFoundError as e:
         return [TextContent(type="text", text=f"Error: {str(e)}")]
@@ -72,8 +75,8 @@ def handle_save_diagram(arguments: Any) -> list[TextContent]:
         return [TextContent(type="text", text=f"Error saving diagram: {str(e)}")]
 
 
-def handle_get_diagram_xml(arguments: Any) -> list[TextContent]:
-    """Handle get_diagram_xml tool call."""
+def _handle_get_diagram_xml(arguments: Any) -> list[TextContent]:
+    """Internal helper for get_diagram_xml. Not exposed as a public tool."""
     if diagram_state.current_xml:
         xml_content = diagram_state.current_xml
     elif diagram_state.current_diagram:
@@ -90,8 +93,8 @@ def handle_get_diagram_xml(arguments: Any) -> list[TextContent]:
     )]
 
 
-def handle_set_diagram_xml(arguments: Any) -> list[TextContent]:
-    """Handle set_diagram_xml tool call."""
+def _handle_set_diagram_xml(arguments: Any) -> list[TextContent]:
+    """Internal helper for set_diagram_xml. Not exposed as a public tool."""
     try:
         xml_content = arguments["xml"]
         doc = parse_drawio_xml(xml_content)
