@@ -176,9 +176,10 @@ class Diagram:
         LINE_HEIGHT = 26
         DIVIDER_HEIGHT = 8
         
-        # Normalize GraphViz-style line breaks (\\l) to newlines
-        # This handles: "Teacher|+ id: string\\l+ name: string\\l"
-        normalized_label = label.replace('\\l', '\n').replace('\\\\l', '\n')
+        # Normalize GraphViz-style line breaks to newlines
+        # Matches one or more backslashes followed by 'l' (e.g., \l, \\l)
+        # This handles: "Teacher|+ id: string\l+ name: string\l"
+        normalized_label = re.sub(r'\\+l', '\n', label)
         
         # Determine which separator to use:
         # 1. First check for box-drawing horizontal lines (─)
