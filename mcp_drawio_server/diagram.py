@@ -5,6 +5,7 @@ This module provides the Diagram class which manages shapes, connections,
 and generates Draw.io XML format.
 """
 
+import re
 from typing import Optional
 from datetime import datetime, timezone
 from .models import Shape, Connection, UMLSection
@@ -101,7 +102,6 @@ class Diagram:
         class_name = label
         
         # Use regex to check for any UML separator (3+ horizontal box-drawing characters)
-        import re
         has_uml_separator = shape_type in uml_class_types and re.search(r'─{3,}', label)
         
         if has_uml_separator:
@@ -160,8 +160,6 @@ class Diagram:
         Returns:
             Tuple of (class_name, list of UMLSection objects, calculated_height)
         """
-        import re
-        
         # Constants for UML class layout
         HEADER_HEIGHT = 26
         LINE_HEIGHT = 26
