@@ -53,28 +53,7 @@ def get_tool_definitions() -> list[Tool]:
                 "required": ["path"]
             }
         ),
-        Tool(
-            name="get_diagram_xml",
-            description="Get the current diagram as Draw.io XML.",
-            inputSchema={
-                "type": "object",
-                "properties": {}
-            }
-        ),
-        Tool(
-            name="set_diagram_xml",
-            description="Set diagram from raw Draw.io XML.",
-            inputSchema={
-                "type": "object",
-                "properties": {
-                    "xml": {
-                        "type": "string",
-                        "description": "Complete Draw.io XML content"
-                    }
-                },
-                "required": ["xml"]
-            }
-        ),
+
         Tool(
             name="list_cells",
             description="List all cells (shapes and connections) with IDs, labels, types, and bindings.",

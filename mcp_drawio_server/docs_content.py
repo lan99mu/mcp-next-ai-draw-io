@@ -30,15 +30,6 @@ Save the current diagram to a .drawio file on disk.
 **Parameters:**
 - `path`: Path where the .drawio file should be saved
 
-### get_diagram_xml
-Get the current diagram as Draw.io XML. Returns the complete XML structure for inspection or advanced manipulation.
-
-### set_diagram_xml
-Set the diagram from raw Draw.io XML for direct XML manipulation.
-
-**Parameters:**
-- `xml`: Complete Draw.io XML content
-
 ## Inspection Tools
 
 ### list_cells

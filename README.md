@@ -52,7 +52,6 @@ This MCP server follows the principle of **tool encapsulation** rather than appl
 - 📁 **Load & Save** - Read existing .drawio files and save modifications
 - 🔍 **Inspect** - List and examine diagram elements (cells)  
 - ✏️ **Modify** - Update, add, or delete specific elements by ID
-- ⚡ **Direct XML** - Access and manipulate raw Draw.io XML
 - 🏗️ **Create** - Build diagrams programmatically from scratch
 - 🔷 **Shape Types** - Support for multiple predefined shapes
 - 🎨 **Styling** - Custom Draw.io style strings for advanced control
@@ -273,10 +272,9 @@ Simply ask: "Show me the bindings guide" or "What are best practices?"
 
 | Tool | Description | Key Parameters |
 |------|-------------|----------------|
+| `create_diagram` | Create new diagram | `name` (optional) |
 | `load_diagram` | Load existing .drawio file | `path` |
 | `save_diagram` | Save diagram to file | `path` |
-| `get_diagram_xml` | Get raw XML content | None |
-| `set_diagram_xml` | Set from raw XML | `xml` |
 
 ### Inspection Tools / 检查工具
 
@@ -559,12 +557,6 @@ detect_line_crossings()
 - Improves diagram readability by highlighting crossed lines
 - Provides actionable suggestions for AI models to auto-fix layouts
 - Works with both simple direct connections and complex routed connections
-
-### Creation Tools / 创建工具
-
-| Tool | Description | Key Parameters |
-|------|-------------|----------------|
-| `create_diagram` | Create new diagram | `name` (optional) |
 
 ## Supported Shape Types / 支持的形状类型
 
