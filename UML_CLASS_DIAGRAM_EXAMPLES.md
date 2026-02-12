@@ -210,6 +210,35 @@ style="endArrow=diamondThin;endFill=0;endSize=12;"
 4. **Choose appropriate relationships**: Use the correct arrow style for the relationship type
 5. **Group related classes**: Use packages to organize classes
 
+## Supported Label Formats
+
+The MCP Draw.io Server supports two UML class label formats:
+
+### Format 1: Box-Drawing Style (Recommended)
+Use Unicode box-drawing characters (─) to separate sections:
+
+```
+"ClassName\n───────\n- field1: type\n- field2: type\n───────\n+ method1()\n+ method2()"
+```
+
+### Format 2: Pipe-Separated Style (GraphViz/Mermaid Compatible)
+Use `|` as section separators and `\l` for line breaks within sections:
+
+```
+"ClassName|+ field1: type\l+ field2: type\l|+ method1()\l+ method2()\l"
+```
+
+Example with both formats producing the same result:
+```python
+# Format 1 - Box-drawing style
+label1 = "Teacher\n───────\n+ id: string\n+ name: string\n───────\n+ teach(): void"
+
+# Format 2 - Pipe-separated style  
+label2 = r"Teacher|+ id: string\l+ name: string\l|+ teach(): void\l"
+
+# Both create the same UML class structure in Draw.io
+```
+
 ## Using with MCP Tools
 
 When using the MCP server, you can create UML class diagrams like this:

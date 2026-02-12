@@ -101,8 +101,13 @@ class Diagram:
         uml_sections = []
         class_name = label
         
-        # Use regex to check for any UML separator (3+ horizontal box-drawing characters)
-        has_uml_separator = shape_type in uml_class_types and re.search(r'─{3,}', label)
+        # Use regex to check for any UML separator:
+        # - Box-drawing horizontal lines (3+ ─ characters): ───────
+        # - Pipe separators for GraphViz/Mermaid-style labels: |
+        has_uml_separator = shape_type in uml_class_types and (
+            re.search(r'─{3,}', label) or 
+            re.search(r'\|', label)
+        )
         
         if has_uml_separator:
             # Parse the label to extract class name, attributes, and methods
@@ -152,8 +157,14 @@ class Diagram:
     def _parse_uml_label(self, label: str, width: float, start_id: int) -> tuple[str, list, float]:
         """Parse a UML class label and create proper sections.
         
+        Supports multiple formats:
+        1. Box-drawing style: "Name\\n───────\\n- attr: type"
+        2. GraphViz/Mermaid pipe style: "Name|+ attr: type\\\\l|+ method()"
+           - Uses | as section separator
+           - Uses \\l as line break within sections
+        
         Args:
-            label: The full label with sections separated by horizontal lines (─ characters)
+            label: The full label with sections separated by horizontal lines or pipes
             width: Width of the shape
             start_id: Starting ID number for sections
             
@@ -165,9 +176,23 @@ class Diagram:
         LINE_HEIGHT = 26
         DIVIDER_HEIGHT = 8
         
-        # Use regex to split by any sequence of box-drawing horizontal lines (─)
-        # This handles various separator lengths: ───────, ───────────, etc.
-        parts = re.split(r'─{3,}', label)
+        # Normalize GraphViz-style line breaks (\\l) to newlines
+        # This handles: "Teacher|+ id: string\\l+ name: string\\l"
+        normalized_label = label.replace('\\l', '\n').replace('\\\\l', '\n')
+        
+        # Determine which separator to use:
+        # 1. First check for box-drawing horizontal lines (─)
+        # 2. Then check for pipe separators (|)
+        if re.search(r'─{3,}', normalized_label):
+            # Use box-drawing style separator
+            parts = re.split(r'─{3,}', normalized_label)
+        elif '|' in normalized_label:
+            # Use pipe-style separator (GraphViz/Mermaid format)
+            parts = normalized_label.split('|')
+        else:
+            # No recognizable separator
+            return label, [], 60
+        
         parts = [p.strip() for p in parts if p.strip()]
         
         if len(parts) == 0:

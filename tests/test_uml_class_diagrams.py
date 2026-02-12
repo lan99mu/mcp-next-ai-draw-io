@@ -244,6 +244,68 @@ def test_all_uml_shapes():
     return xml
 
 
+def test_pipe_separated_uml_label():
+    """Test UML class creation with pipe-separated GraphViz/Mermaid-style labels.
+    
+    This format uses:
+    - | as section separator (instead of ───────)
+    - \\l as line break (GraphViz notation for left-aligned text)
+    """
+    print("\n=== Testing Pipe-Separated UML Label Format ===\n")
+    
+    diagram = Diagram("Pipe Format Test")
+    
+    # Test with the exact format from the issue:
+    # Teacher|+ id: string\\l+ name: string\\l+ subject: string\\l|+ teach(student: Student): void\\l+ grade(student: Student): void\\l
+    label = r"Teacher|+ id: string\l+ name: string\l+ subject: string\l|+ teach(student: Student): void\l+ grade(student: Student): void\l"
+    
+    teacher_class = diagram.add_shape(
+        label,
+        x=100, y=50,
+        width=250, height=150,
+        shape_type="uml_class"
+    )
+    
+    # Verify the shape was created with proper sections
+    shape = diagram.shapes[teacher_class]
+    
+    # Class name should be extracted correctly
+    assert shape.label == "Teacher", f"Expected 'Teacher', got '{shape.label}'"
+    
+    # Should have sections (attributes + divider + methods)
+    assert len(shape.uml_sections) > 0, "Expected UML sections to be created"
+    
+    # Find text sections
+    text_sections = [s for s in shape.uml_sections if s.section_type == "text"]
+    assert len(text_sections) == 2, f"Expected 2 text sections (attributes + methods), got {len(text_sections)}"
+    
+    # Verify attributes section content
+    attr_section = text_sections[0]
+    assert "+ id: string" in attr_section.content, "Attributes should contain '+ id: string'"
+    assert "+ name: string" in attr_section.content, "Attributes should contain '+ name: string'"
+    assert "+ subject: string" in attr_section.content, "Attributes should contain '+ subject: string'"
+    
+    # Verify methods section content
+    method_section = text_sections[1]
+    assert "+ teach(student: Student): void" in method_section.content, "Methods should contain teach()"
+    assert "+ grade(student: Student): void" in method_section.content, "Methods should contain grade()"
+    
+    # Verify there's a divider line between sections
+    line_sections = [s for s in shape.uml_sections if s.section_type == "line"]
+    assert len(line_sections) == 1, f"Expected 1 divider line, got {len(line_sections)}"
+    
+    # Generate XML and verify format
+    xml = diagram.to_drawio_xml()
+    assert "Teacher" in xml
+    assert "swimlane" in xml  # UML class uses swimlane style
+    
+    print("✓ Pipe-separated UML label format parsed correctly")
+    print(f"  - Class name: {shape.label}")
+    print(f"  - Sections: {len(shape.uml_sections)} (2 text + 1 divider)")
+    print(f"  - Attributes: 3 fields")
+    print(f"  - Methods: 2 methods")
+
+
 if __name__ == "__main__":
     print("Testing UML Class Diagram Support")
     print("=" * 50)
