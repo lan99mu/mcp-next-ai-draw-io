@@ -171,12 +171,12 @@ def get_tool_definitions() -> list[Tool]:
                     },
                     "width": {
                         "type": "number",
-                        "description": "Width of the shape (default: 120)",
+                        "description": "Width of the shape (default: 120, or auto-calculated if auto_size=true)",
                         "default": 120
                     },
                     "height": {
                         "type": "number",
-                        "description": "Height of the shape (default: 60)",
+                        "description": "Height of the shape (default: 60, or auto-calculated if auto_size=true)",
                         "default": 60
                     },
                     "shape_type": {
@@ -193,8 +193,57 @@ def get_tool_definitions() -> list[Tool]:
                     },
                     "style": {
                         "type": "string",
-                        "description": "Custom Draw.io style string (optional)",
+                        "description": "Custom Draw.io style string (optional, overrides other style options)",
                         "default": ""
+                    },
+                    "parent_id": {
+                        "type": "string",
+                        "description": "ID of parent container/swimlane (optional)"
+                    },
+                    "dashed": {
+                        "type": "boolean",
+                        "description": "Whether to use dashed border (default: false)",
+                        "default": False
+                    },
+                    "rounded": {
+                        "type": "boolean",
+                        "description": "Whether to use rounded corners (default: false)",
+                        "default": False
+                    },
+                    "stroke_width": {
+                        "type": "number",
+                        "description": "Border thickness (optional)"
+                    },
+                    "fill_color": {
+                        "type": "string",
+                        "description": "Background color, e.g., '#ffffff' (optional)"
+                    },
+                    "stroke_color": {
+                        "type": "string",
+                        "description": "Border color, e.g., '#000000' (optional)"
+                    },
+                    "font_size": {
+                        "type": "integer",
+                        "description": "Text font size (optional)"
+                    },
+                    "font_color": {
+                        "type": "string",
+                        "description": "Text color, e.g., '#000000' (optional)"
+                    },
+                    "opacity": {
+                        "type": "number",
+                        "description": "Opacity (0-100, optional)"
+                    },
+                    "overflow": {
+                        "type": "string",
+                        "description": "Text overflow behavior (default: hidden)",
+                        "enum": ["hidden", "visible", "fill"],
+                        "default": "hidden"
+                    },
+                    "auto_size": {
+                        "type": "boolean",
+                        "description": "If true, auto-calculate width/height based on label text (default: false)",
+                        "default": False
                     }
                 },
                 "required": ["label"]
@@ -202,7 +251,7 @@ def get_tool_definitions() -> list[Tool]:
         ),
         Tool(
             name="add_connection",
-            description="Add a connection/edge between two shapes. Supports label positioning and routing.",
+            description="Add a connection/edge between two shapes. Supports label positioning, routing, and styles including polylines.",
             inputSchema={
                 "type": "object",
                 "properties": {
@@ -221,13 +270,13 @@ def get_tool_definitions() -> list[Tool]:
                     },
                     "arrow_type": {
                         "type": "string",
-                        "description": "Arrow type (default: classic)",
-                        "enum": ["classic", "block", "open", "oval", "diamond", "none"],
+                        "description": "Arrow type at the end (default: classic)",
+                        "enum": ["classic", "block", "open", "oval", "diamond", "diamondThin", "none"],
                         "default": "classic"
                     },
                     "style": {
                         "type": "string",
-                        "description": "Custom Draw.io style string (optional)",
+                        "description": "Custom Draw.io style string (optional, overrides other style options)",
                         "default": ""
                     },
                     "label_position": {
@@ -271,21 +320,56 @@ def get_tool_definitions() -> list[Tool]:
                             "minItems": 2,
                             "maxItems": 2
                         },
-                        "description": "List of intermediate routing points as [x, y] coordinates in absolute pixels (optional)"
+                        "description": "List of intermediate routing points (bend points) as [x, y] coordinates for polylines (optional)"
                     },
                     "source_point": {
                         "type": "array",
                         "items": {"type": "number"},
                         "minItems": 2,
                         "maxItems": 2,
-                        "description": "Explicit source point as [x, y] coordinates in absolute pixels (optional, overrides exit point)"
+                        "description": "Explicit source point as [x, y] coordinates in absolute pixels (optional)"
                     },
                     "target_point": {
                         "type": "array",
                         "items": {"type": "number"},
                         "minItems": 2,
                         "maxItems": 2,
-                        "description": "Explicit target point as [x, y] coordinates in absolute pixels (optional, overrides entry point)"
+                        "description": "Explicit target point as [x, y] coordinates in absolute pixels (optional)"
+                    },
+                    "edge_style": {
+                        "type": "string",
+                        "description": "Edge routing style (default: orthogonal). 'orthogonal' creates right-angle connections, 'straight' creates direct lines, 'curved' creates smooth curves, 'entity_relation' creates ER-style connections.",
+                        "enum": ["orthogonal", "straight", "curved", "entity_relation"],
+                        "default": "orthogonal"
+                    },
+                    "dashed": {
+                        "type": "boolean",
+                        "description": "Whether to use dashed line (default: false)",
+                        "default": False
+                    },
+                    "rounded": {
+                        "type": "boolean",
+                        "description": "Whether to use rounded corners for orthogonal edges (default: false)",
+                        "default": False
+                    },
+                    "stroke_width": {
+                        "type": "number",
+                        "description": "Line thickness (optional)"
+                    },
+                    "stroke_color": {
+                        "type": "string",
+                        "description": "Line color, e.g., '#000000' (optional)"
+                    },
+                    "start_arrow": {
+                        "type": "string",
+                        "description": "Arrow type at the start (default: none)",
+                        "enum": ["none", "classic", "block", "open", "oval", "diamond", "diamondThin"],
+                        "default": "none"
+                    },
+                    "end_arrow": {
+                        "type": "string",
+                        "description": "Arrow type at the end (alternative to arrow_type, optional)",
+                        "enum": ["none", "classic", "block", "open", "oval", "diamond", "diamondThin"]
                     }
                 },
                 "required": ["source_id", "target_id"]

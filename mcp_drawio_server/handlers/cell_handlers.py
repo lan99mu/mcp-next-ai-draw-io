@@ -158,7 +158,18 @@ def handle_add_shape(arguments: Any) -> list[TextContent]:
         width=arguments.get("width", 120),
         height=arguments.get("height", 60),
         shape_type=arguments.get("shape_type", "rectangle"),
-        style=arguments.get("style", "")
+        style=arguments.get("style", ""),
+        parent_id=arguments.get("parent_id"),
+        dashed=arguments.get("dashed", False),
+        rounded=arguments.get("rounded", False),
+        stroke_width=arguments.get("stroke_width"),
+        fill_color=arguments.get("fill_color"),
+        stroke_color=arguments.get("stroke_color"),
+        font_size=arguments.get("font_size"),
+        font_color=arguments.get("font_color"),
+        opacity=arguments.get("opacity"),
+        overflow=arguments.get("overflow", "hidden"),
+        auto_size=arguments.get("auto_size", False)
     )
     if diagram_state.current_xml:
         diagram_state.current_xml = diagram.to_drawio_xml()
@@ -201,7 +212,14 @@ def handle_add_connection(arguments: Any) -> list[TextContent]:
             exit_y=arguments.get("exit_y"),
             waypoints=waypoints,
             source_point=source_point,
-            target_point=target_point
+            target_point=target_point,
+            edge_style=arguments.get("edge_style", "orthogonal"),
+            dashed=arguments.get("dashed", False),
+            rounded=arguments.get("rounded", False),
+            stroke_width=arguments.get("stroke_width"),
+            stroke_color=arguments.get("stroke_color"),
+            start_arrow=arguments.get("start_arrow"),
+            end_arrow=arguments.get("end_arrow")
         )
         if diagram_state.current_xml:
             diagram_state.current_xml = diagram.to_drawio_xml()

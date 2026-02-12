@@ -569,7 +569,7 @@ Horizontal swimlane divider.
 Vertical swimlane divider.
 
 ### container
-Generic container for grouping.
+Generic container for grouping. Supports parent_id for child shapes.
 
 ## UML Class Diagram Shapes
 
@@ -591,32 +591,105 @@ Package container for grouping classes.
 ### uml_note
 Note/comment for UML diagrams.
 
+## Style Options
+
+### Shape Style Parameters
+
+```python
+add_shape(
+    label="My Shape",
+    x=100, y=100,
+    # Style options:
+    dashed=True,           # Dashed border
+    rounded=True,          # Rounded corners
+    stroke_width=2,        # Border thickness
+    fill_color="#e1f5ff",  # Background color
+    stroke_color="#0077cc",# Border color
+    font_size=14,          # Text size
+    font_color="#333333",  # Text color
+    opacity=80,            # Opacity (0-100)
+    overflow="hidden",     # Text overflow: hidden/visible/fill
+    auto_size=True         # Auto-calculate dimensions from text
+)
+```
+
+### Connection Style Parameters
+
+```python
+add_connection(
+    source_id=shape1,
+    target_id=shape2,
+    # Edge routing:
+    edge_style="orthogonal",  # orthogonal/straight/curved/entity_relation
+    waypoints=[(200, 150), (200, 250)],  # Polyline bend points
+    # Arrows:
+    start_arrow="none",       # Arrow at start
+    end_arrow="block",        # Arrow at end
+    # Line style:
+    dashed=True,              # Dashed line
+    rounded=True,             # Rounded corners (orthogonal only)
+    stroke_width=2,           # Line thickness
+    stroke_color="#ff0000"    # Line color
+)
+```
+
+### Common Style Properties (via style parameter)
+
+- `fillColor`: Background color
+- `strokeColor`: Border color  
+- `strokeWidth`: Border thickness
+- `fontSize`: Text size
+- `fontColor`: Text color
+- `rounded`: Rounded corners (1/0)
+- `dashed`: Dashed line (1/0)
+- `opacity`: Opacity (0-100)
+
 ## Usage Examples
 
-### Basic Shapes
+### Basic Shapes with Styles
 ```python
-# Rectangle (default)
-add_shape(label="Process", x=100, y=100)
+# Dashed rectangle with rounded corners
+add_shape(label="Process", x=100, y=100, dashed=True, rounded=True)
 
-# Explicit shape type
-add_shape(label="Decision", x=200, y=100, shape_type="diamond")
-add_shape(label="Database", x=300, y=100, shape_type="cylinder")
+# Custom colors
+add_shape(label="Alert", x=200, y=100, fill_color="#ffcccc", stroke_color="#ff0000")
+
+# Auto-sized shape based on text
+add_shape(label="Long description text\\nLine 2\\nLine 3", auto_size=True)
 ```
 
-### Activity Diagrams
+### Polyline Connections
 ```python
-start = add_shape(label="Start", shape_type="activity_start")
-action = add_shape(label="Process Data", shape_type="activity_action")
-decision = add_shape(label="Valid?", shape_type="activity_decision")
-end = add_shape(label="End", shape_type="activity_end")
-```
-
-### UML Class Diagrams
-```python
-class_shape = add_shape(
-    label="User\\n---\\n+id: int\\n+name: string\\n---\\n+login()\\n+logout()",
-    shape_type="uml_class"
+# Create a connection with waypoints (bend points)
+add_connection(
+    source_id=shape1,
+    target_id=shape2,
+    waypoints=[(150, 200), (150, 350), (300, 350)]  # L-shaped path
 )
+```
+
+### UML Relationships
+```python
+# Inheritance (solid line, hollow arrow)
+add_connection(source_id=child, target_id=parent, end_arrow="block")
+
+# Interface implementation (dashed line, hollow arrow)
+add_connection(source_id=impl, target_id=interface, dashed=True, end_arrow="block")
+
+# Composition (solid line, filled diamond)
+add_connection(source_id=whole, target_id=part, start_arrow="diamondThin")
+
+# Aggregation (solid line, hollow diamond)
+add_connection(source_id=whole, target_id=part, start_arrow="diamond")
+```
+
+### Container with Children
+```python
+# Create container
+container = add_shape("Container", x=50, y=50, width=300, height=200, shape_type="container")
+
+# Add child inside container (relative coordinates)
+child = add_shape("Child", x=20, y=30, parent_id=container)
 ```
 
 ## Shape Dimensions
@@ -632,25 +705,18 @@ Recommended dimensions by type:
 - **cylinder**: 120x80
 - **activity_start/end**: 40x40
 - **activity_action**: 140x60
-- **uml_class**: 160x120+
+- **uml_class**: 160x120+ (use auto_size=True)
 
-## Styling
+## Auto-Size Feature
 
-Use the `style` parameter for custom appearance:
+Use `auto_size=True` to automatically calculate shape dimensions based on text content:
 
 ```python
-add_shape(
-    label="Custom",
-    shape_type="rectangle",
-    style="fillColor=#e1f5ff;strokeColor=#0077cc;strokeWidth=2;"
+# Shape will auto-size to fit the text
+class_shape = add_shape(
+    label="UserService\\n---\\n+userId: int\\n+name: string\\n+email: string\\n---\\n+getUser()\\n+updateUser()",
+    shape_type="uml_class",
+    auto_size=True
 )
 ```
-
-Common style properties:
-- `fillColor`: Background color
-- `strokeColor`: Border color  
-- `strokeWidth`: Border thickness
-- `fontSize`: Text size
-- `fontColor`: Text color
-- `rounded`: Rounded corners (1/0)
 """
