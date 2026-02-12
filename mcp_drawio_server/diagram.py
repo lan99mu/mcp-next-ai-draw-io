@@ -5,9 +5,10 @@ This module provides the Diagram class which manages shapes, connections,
 and generates Draw.io XML format.
 """
 
+import re
 from typing import Optional
 from datetime import datetime, timezone
-from .models import Shape, Connection
+from .models import Shape, Connection, UMLSection
 
 
 # Text size calculation constants
@@ -95,8 +96,28 @@ class Diagram:
         shape_id = f"shape_{self.next_id}"
         self.next_id += 1
         
-        # Auto-calculate size if requested
-        if auto_size and label:
+        # Check if this is a UML class type that needs section parsing
+        uml_class_types = ('uml_class', 'uml_interface', 'uml_abstract_class', 'uml_enum')
+        uml_sections = []
+        class_name = label
+        
+        # Use regex to check for any UML separator (3+ horizontal box-drawing characters)
+        has_uml_separator = shape_type in uml_class_types and re.search(r'─{3,}', label)
+        
+        if has_uml_separator:
+            # Parse the label to extract class name, attributes, and methods
+            class_name, uml_sections, calculated_height = self._parse_uml_label(
+                label, width, self.next_id
+            )
+            # Update next_id to account for generated section IDs
+            self.next_id += len(uml_sections)
+            
+            # Use calculated height if not using default
+            if height == 60:
+                height = calculated_height
+        
+        # Auto-calculate size if requested (for non-UML or simple UML shapes)
+        if auto_size and label and not uml_sections:
             calculated_width, calculated_height = self._calculate_text_size(
                 label, shape_type, font_size or 12
             )
@@ -107,7 +128,7 @@ class Diagram:
         
         self.shapes[shape_id] = Shape(
             id=shape_id,
-            label=label,
+            label=class_name,
             x=x,
             y=y,
             width=width,
@@ -123,9 +144,79 @@ class Diagram:
             font_size=font_size,
             font_color=font_color,
             opacity=opacity,
-            overflow=overflow
+            overflow=overflow,
+            uml_sections=uml_sections
         )
         return shape_id
+    
+    def _parse_uml_label(self, label: str, width: float, start_id: int) -> tuple[str, list, float]:
+        """Parse a UML class label and create proper sections.
+        
+        Args:
+            label: The full label with sections separated by horizontal lines (─ characters)
+            width: Width of the shape
+            start_id: Starting ID number for sections
+            
+        Returns:
+            Tuple of (class_name, list of UMLSection objects, calculated_height)
+        """
+        # Constants for UML class layout
+        HEADER_HEIGHT = 26
+        LINE_HEIGHT = 26
+        DIVIDER_HEIGHT = 8
+        
+        # Use regex to split by any sequence of box-drawing horizontal lines (─)
+        # This handles various separator lengths: ───────, ───────────, etc.
+        parts = re.split(r'─{3,}', label)
+        parts = [p.strip() for p in parts if p.strip()]
+        
+        if len(parts) == 0:
+            return label, [], 60
+        
+        # First part is always the class name
+        class_name = parts[0]
+        
+        # Remaining parts are attribute/method sections
+        sections = []
+        total_height = HEADER_HEIGHT
+        section_id = start_id
+        
+        for i, part in enumerate(parts[1:]):
+            # Clean up the content - remove any remaining line characters
+            # and filter out empty lines
+            lines = [l.strip() for l in part.split('\n') if l.strip() and not re.match(r'^─+$', l.strip())]
+            clean_content = '\n'.join(lines)
+            
+            if not clean_content:
+                continue
+                
+            # Calculate section height based on number of lines
+            section_height = max(len(lines) * LINE_HEIGHT, LINE_HEIGHT)
+            
+            # Add divider before this section (except for the first section after name)
+            if i > 0:
+                divider_section = UMLSection(
+                    id=f"section_{section_id}",
+                    content="",
+                    height=DIVIDER_HEIGHT,
+                    section_type="line"
+                )
+                sections.append(divider_section)
+                section_id += 1
+                total_height += DIVIDER_HEIGHT
+            
+            # Add text section
+            text_section = UMLSection(
+                id=f"section_{section_id}",
+                content=clean_content,
+                height=section_height,
+                section_type="text"
+            )
+            sections.append(text_section)
+            section_id += 1
+            total_height += section_height
+        
+        return class_name, sections, total_height
     
     @staticmethod
     def _calculate_text_size(label: str, shape_type: str, font_size: int = 12) -> tuple[float, float]:
@@ -281,6 +372,34 @@ class Diagram:
                 f'width="{shape.width}" height="{shape.height}" as="geometry"/>'
             )
             xml_parts.append('        </mxCell>')
+            
+            # Add UML class child sections if present
+            if shape.uml_sections:
+                current_y = 26  # Start after header (26px header height)
+                for section in shape.uml_sections:
+                    if section.section_type == "text":
+                        # Text section for attributes or methods
+                        text_style = "text;strokeColor=none;fillColor=none;align=left;verticalAlign=top;spacingLeft=4;spacingRight=4;overflow=hidden;rotatable=0;points=[[0,0.5],[1,0.5]];portConstraint=eastwest;whiteSpace=wrap;html=1;"
+                        xml_parts.append(
+                            f'        <mxCell id="{section.id}" value="{self._escape_xml(section.content)}" '
+                            f'style="{text_style}" vertex="1" parent="{shape.id}">'
+                        )
+                        xml_parts.append(
+                            f'          <mxGeometry y="{current_y}" width="{shape.width}" height="{section.height}" as="geometry"/>'
+                        )
+                        xml_parts.append('        </mxCell>')
+                    elif section.section_type == "line":
+                        # Divider line
+                        line_style = "line;strokeWidth=1;fillColor=none;align=left;verticalAlign=middle;spacingTop=-1;spacingLeft=3;spacingRight=3;rotatable=0;labelPosition=right;points=[];portConstraint=eastwest;strokeColor=inherit;"
+                        xml_parts.append(
+                            f'        <mxCell id="{section.id}" value="" '
+                            f'style="{line_style}" vertex="1" parent="{shape.id}">'
+                        )
+                        xml_parts.append(
+                            f'          <mxGeometry y="{current_y}" width="{shape.width}" height="{section.height}" as="geometry"/>'
+                        )
+                        xml_parts.append('        </mxCell>')
+                    current_y += section.height
         
         # Add connections
         for conn in self.connections.values():
@@ -509,8 +628,8 @@ class Diagram:
         """Add a UML class with proper sections, auto-sized and auto-bound.
         
         This creates a UML class diagram box with properly formatted sections
-        for name, attributes, and methods. The height is auto-calculated based
-        on content, and all parts are automatically bound together.
+        for name, attributes, and methods using nested child elements for proper
+        Draw.io rendering. The height is auto-calculated based on content.
         
         Args:
             name: Class name (e.g., "User", "«interface»\\nIService")
@@ -523,7 +642,8 @@ class Diagram:
             auto_bind: Whether to bind the class parts together (default: True)
             
         Returns:
-            Dictionary with keys 'class_id' for the main shape ID
+            Dictionary with keys 'class_id' for the main shape ID and 'section_ids' 
+            for the child element IDs
         """
         attributes = attributes or []
         methods = methods or []
@@ -537,38 +657,95 @@ class Diagram:
         }
         shape_type = shape_type_map.get(class_type, "uml_class")
         
-        # Build label with sections
-        sections = [name]
+        # Constants for UML class layout
+        HEADER_HEIGHT = 26
+        LINE_HEIGHT = 26  # Height per text line
+        DIVIDER_HEIGHT = 8  # Height for divider lines
         
-        if attributes:
-            sections.append(UML_SECTION_SEPARATOR)
-            sections.extend(attributes)
+        # Calculate section heights
+        attr_height = max(len(attributes) * LINE_HEIGHT, LINE_HEIGHT) if attributes else 0
+        method_height = max(len(methods) * LINE_HEIGHT, LINE_HEIGHT) if methods else 0
         
-        if methods:
-            sections.append(UML_SECTION_SEPARATOR)
-            sections.extend(methods)
-        
-        label = "\n".join(sections)
-        
-        # Auto-calculate height if not provided
+        # Calculate total height
         if height is None:
-            line_count = len(sections)
-            header_height = 26  # Header section
-            line_height = 20   # Each line
-            height = header_height + (line_count * line_height)
-            height = max(height, 60)  # Minimum height
+            height = HEADER_HEIGHT
+            if attributes:
+                height += attr_height + DIVIDER_HEIGHT
+            if methods:
+                height += method_height
+                if not attributes:
+                    height += DIVIDER_HEIGHT
         
-        # Create the main class shape
-        class_id = self.add_shape(
-            label=label,
+        # Create UML sections list
+        uml_sections = []
+        current_y = HEADER_HEIGHT
+        
+        # Attributes section
+        if attributes:
+            attr_content = "\n".join(attributes)
+            attr_section_id = f"section_{self.next_id}"
+            self.next_id += 1
+            uml_sections.append(UMLSection(
+                id=attr_section_id,
+                content=attr_content,
+                height=attr_height,
+                section_type="text"
+            ))
+            current_y += attr_height
+            
+            # Divider after attributes (if there are methods)
+            if methods:
+                divider_id = f"section_{self.next_id}"
+                self.next_id += 1
+                uml_sections.append(UMLSection(
+                    id=divider_id,
+                    content="",
+                    height=DIVIDER_HEIGHT,
+                    section_type="line"
+                ))
+                current_y += DIVIDER_HEIGHT
+        elif methods:
+            # Divider before methods (if no attributes)
+            divider_id = f"section_{self.next_id}"
+            self.next_id += 1
+            uml_sections.append(UMLSection(
+                id=divider_id,
+                content="",
+                height=DIVIDER_HEIGHT,
+                section_type="line"
+            ))
+            current_y += DIVIDER_HEIGHT
+        
+        # Methods section
+        if methods:
+            method_content = "\n".join(methods)
+            method_section_id = f"section_{self.next_id}"
+            self.next_id += 1
+            uml_sections.append(UMLSection(
+                id=method_section_id,
+                content=method_content,
+                height=method_height,
+                section_type="text"
+            ))
+        
+        # Create the main class shape (header only shows name)
+        shape_id = f"shape_{self.next_id}"
+        self.next_id += 1
+        
+        self.shapes[shape_id] = Shape(
+            id=shape_id,
+            label=name,
             x=x,
             y=y,
             width=width,
             height=height,
-            shape_type=shape_type
+            shape_type=shape_type,
+            uml_sections=uml_sections
         )
         
-        return {"class_id": class_id}
+        section_ids = [s.id for s in uml_sections]
+        
+        return {"class_id": shape_id, "section_ids": section_ids}
     
     def add_swimlane_pool(
         self,
