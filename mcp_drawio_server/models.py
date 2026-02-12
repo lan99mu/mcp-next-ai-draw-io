@@ -18,6 +18,14 @@ class DiagramElement(BaseModel):
     style: str = ""
 
 
+class UMLSection(BaseModel):
+    """Represents a section in a UML class (attributes or methods)"""
+    id: str
+    content: str = ""  # Text content of the section
+    height: float = 26  # Height of this section
+    section_type: str = "text"  # "text" for content, "line" for divider
+
+
 class Shape(DiagramElement):
     """Represents a shape/node in the diagram"""
     x: float = 0
@@ -37,6 +45,8 @@ class Shape(DiagramElement):
     font_color: Optional[str] = None  # Text color
     opacity: Optional[float] = None  # Opacity (0-100)
     overflow: str = "hidden"  # Text overflow behavior: "hidden", "visible", "fill"
+    # UML class sections (for proper UML class rendering)
+    uml_sections: list[UMLSection] = Field(default_factory=list)
 
 
 class Connection(DiagramElement):

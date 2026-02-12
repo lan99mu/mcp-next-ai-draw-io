@@ -377,8 +377,12 @@ def test_add_uml_class_helper():
     shape = diagram.shapes[result["class_id"]]
     assert shape.shape_type == "uml_class"
     assert "User" in shape.label
-    assert "- id: int" in shape.label
-    assert "+ login()" in shape.label
+    # Attributes and methods are now stored in uml_sections, not in label
+    assert len(shape.uml_sections) >= 2  # At least attributes section and methods section
+    # Verify attributes are in a section
+    attr_content = "\n".join(s.content for s in shape.uml_sections if s.section_type == "text")
+    assert "- id: int" in attr_content
+    assert "+ login()" in attr_content
     # Height should be auto-calculated
     assert shape.height > 100  # Should be larger due to content
 
@@ -397,7 +401,9 @@ def test_add_uml_class_interface():
     shape = diagram.shapes[result["class_id"]]
     assert shape.shape_type == "uml_interface"
     assert "IService" in shape.label
-    assert "+ execute()" in shape.label
+    # Methods are now stored in uml_sections, not in label
+    method_content = "\n".join(s.content for s in shape.uml_sections if s.section_type == "text")
+    assert "+ execute()" in method_content
 
 
 def test_add_swimlane_pool():
