@@ -4,18 +4,17 @@ Test the prompts feature implementation
 """
 
 import asyncio
-from mcp.server import Server
-from mcp_drawio_server import server as server_module
+import pytest
+from mcp_drawio_server.prompts import get_prompt_definitions, get_prompt_result
 
 
+@pytest.mark.asyncio
 async def test_list_prompts():
     """Test listing all available prompts"""
     print("Testing list_prompts()...")
     
-    # Get the list_prompts function directly
-    from mcp_drawio_server.server import list_prompts
-    
-    prompts = await list_prompts()
+    # Get the prompts directly from the module
+    prompts = get_prompt_definitions()
     
     print(f"\nFound {len(prompts)} prompts:")
     for prompt in prompts:
@@ -44,12 +43,10 @@ async def test_list_prompts():
     return True
 
 
+@pytest.mark.asyncio
 async def test_get_prompt():
     """Test getting a specific prompt"""
     print("\n\nTesting get_prompt()...")
-    
-    # Get the get_prompt function
-    from mcp_drawio_server.server import get_prompt
     
     # Test each prompt
     test_cases = [
@@ -62,7 +59,7 @@ async def test_get_prompt():
     
     for prompt_name, args in test_cases:
         print(f"\n  Testing: {prompt_name}")
-        result = await get_prompt(prompt_name, args)
+        result = get_prompt_result(prompt_name, args)
         
         assert result.description, f"Missing description for {prompt_name}"
         assert result.messages, f"Missing messages for {prompt_name}"
@@ -84,14 +81,13 @@ async def test_get_prompt():
     return True
 
 
+@pytest.mark.asyncio
 async def test_prompt_content_quality():
     """Test that prompts contain useful efficiency guidance"""
     print("\n\nTesting prompt content quality...")
     
-    from mcp_drawio_server.server import get_prompt
-    
     # Get the optimize_layout prompt
-    result = await get_prompt("optimize_layout", {})
+    result = get_prompt_result("optimize_layout", {})
     content = result.messages[0].content.text.lower()
     
     # Check for key efficiency concepts
@@ -110,7 +106,7 @@ async def test_prompt_content_quality():
     assert len(found_keywords) >= 2, "Prompt should contain efficiency guidance"
     
     # Check the create_flowchart prompt
-    result = await get_prompt("create_flowchart", {"description": "test workflow"})
+    result = get_prompt_result("create_flowchart", {"description": "test workflow"})
     content = result.messages[0].content.text
     
     # Should contain step-by-step workflow

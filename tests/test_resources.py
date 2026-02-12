@@ -4,14 +4,16 @@ Test the resources feature for on-demand documentation
 """
 
 import asyncio
-from mcp_drawio_server.server import list_resources, read_resource
+import pytest
+from mcp_drawio_server.resources import get_resource_definitions, get_resource_content
 
 
+@pytest.mark.asyncio
 async def test_list_resources():
     """Test listing all available resources"""
     print("Testing list_resources()...")
     
-    resources = await list_resources()
+    resources = get_resource_definitions()
     
     print(f"\nFound {len(resources)} documentation resources:")
     for resource in resources:
@@ -36,6 +38,7 @@ async def test_list_resources():
     return True
 
 
+@pytest.mark.asyncio
 async def test_read_resource():
     """Test reading specific resources"""
     print("\n\nTesting read_resource()...")
@@ -49,7 +52,7 @@ async def test_read_resource():
     
     for uri, expected_title in test_cases:
         print(f"\n  Testing: {uri}")
-        result = await read_resource(uri)
+        result = get_resource_content(uri)
         
         assert result.contents, f"Missing contents for {uri}"
         assert len(result.contents) > 0, f"No contents in {uri}"
@@ -66,12 +69,13 @@ async def test_read_resource():
     return True
 
 
+@pytest.mark.asyncio
 async def test_resource_content_quality():
     """Test that resources contain detailed information"""
     print("\n\nTesting resource content quality...")
     
     # Check tools overview
-    result = await read_resource("docs://tools/overview")
+    result = get_resource_content("docs://tools/overview")
     content = result.contents[0].text
     
     # Should contain sections for different tool categories
@@ -83,7 +87,7 @@ async def test_resource_content_quality():
     print("  ✓ Tools overview contains expected sections")
     
     # Check bindings guide
-    result = await read_resource("docs://bindings/guide")
+    result = get_resource_content("docs://bindings/guide")
     content = result.contents[0].text
     
     # Should contain efficiency examples
@@ -94,7 +98,7 @@ async def test_resource_content_quality():
     print("  ✓ Bindings guide contains efficiency examples")
     
     # Check best practices
-    result = await read_resource("docs://workflows/best-practices")
+    result = get_resource_content("docs://workflows/best-practices")
     content = result.contents[0].text
     
     # Should contain workflow patterns
@@ -104,7 +108,7 @@ async def test_resource_content_quality():
     print("  ✓ Best practices contains workflow patterns")
     
     # Check shapes reference
-    result = await read_resource("docs://shapes/reference")
+    result = get_resource_content("docs://shapes/reference")
     content = result.contents[0].text
     
     # Should contain shape type documentation
@@ -117,6 +121,7 @@ async def test_resource_content_quality():
     return True
 
 
+@pytest.mark.asyncio
 async def test_context_savings():
     """Calculate and display context savings"""
     print("\n\nCalculating context savings...")
@@ -140,7 +145,7 @@ async def test_context_savings():
     total_resource_chars = 0
     for uri in ["docs://tools/overview", "docs://bindings/guide", 
                 "docs://workflows/best-practices", "docs://shapes/reference"]:
-        result = await read_resource(uri)
+        result = get_resource_content(uri)
         total_resource_chars += len(result.contents[0].text)
     
     print(f"\n  Total resource documentation: {total_resource_chars} chars")
