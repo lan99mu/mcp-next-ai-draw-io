@@ -5,7 +5,13 @@ This module provides functions for parsing, reading, and modifying
 Draw.io XML structures.
 """
 
+from typing import Optional
 from xml.dom import minidom
+
+
+def _is_non_empty_string(value: Optional[str]) -> bool:
+    """Return True when an XML attribute contains a non-empty string value."""
+    return value is not None and value != ''
 
 
 def parse_drawio_xml(xml_content: str) -> minidom.Document:
@@ -55,7 +61,7 @@ def get_cells_from_xml(xml_content: str) -> list[dict]:
                         entry_y = g.getAttribute('entryY')
                         exit_x = g.getAttribute('exitX')
                         exit_y = g.getAttribute('exitY')
-                        
+
                         if entry_x:
                             cell_info['entry_x'] = entry_x
                         if entry_y:
@@ -66,13 +72,13 @@ def get_cells_from_xml(xml_content: str) -> list[dict]:
                             cell_info['exit_y'] = exit_y
 
                         geometry_points = []
-                        if entry_x or entry_y:
+                        if _is_non_empty_string(entry_x) or _is_non_empty_string(entry_y):
                             geometry_points.append({
                                 'type': 'entry',
                                 'x': entry_x,
                                 'y': entry_y,
                             })
-                        if exit_x or exit_y:
+                        if _is_non_empty_string(exit_x) or _is_non_empty_string(exit_y):
                             geometry_points.append({
                                 'type': 'exit',
                                 'x': exit_x,

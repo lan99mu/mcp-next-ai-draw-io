@@ -13,6 +13,9 @@ from .state import diagram_state, safe_float
 from ..xml_operations import get_cells_from_xml, update_cell_in_xml, delete_cell_in_xml
 
 
+DEFAULT_PARENT_ID = "1"
+
+
 def _get_cells() -> list[dict]:
     """Get cells from the current diagram state."""
     if diagram_state.current_xml:
@@ -24,19 +27,21 @@ def _get_cells() -> list[dict]:
 
 
 def _get_absolute_bounds(cell: dict, cells_by_id: dict[str, dict], seen: set[str] | None = None) -> tuple[float, float, float, float]:
-    """Resolve a cell's absolute bounds, accounting for parent containers."""
+    """Resolve a cell's absolute bounds as (x, y, width, height)."""
     x = safe_float(cell.get('x'))
     y = safe_float(cell.get('y'))
     width = safe_float(cell.get('width'))
     height = safe_float(cell.get('height'))
+    cell_id = cell.get('id')
 
     parent_id = cell.get('parent')
-    if parent_id and parent_id not in {"0", "1"}:
+    if parent_id and parent_id not in {"0", DEFAULT_PARENT_ID}:
         if seen is None:
             seen = set()
-        if cell['id'] in seen:
+        if cell_id in seen:
             return x, y, width, height
-        seen.add(cell['id'])
+        if cell_id:
+            seen.add(cell_id)
 
         parent = cells_by_id.get(parent_id)
         if parent and parent.get('vertex'):
@@ -48,7 +53,7 @@ def _get_absolute_bounds(cell: dict, cells_by_id: dict[str, dict], seen: set[str
 
 
 def _build_shape_geometry(cell: dict, cells_by_id: dict[str, dict]) -> tuple[dict[str, list[float]], list[tuple[str, list[float], list[float]]]]:
-    """Build absolute point and line segment data for a shape."""
+    """Build shape geometry as (points_dict, lines_list) in absolute coordinates."""
     x, y, width, height = _get_absolute_bounds(cell, cells_by_id)
     points = {
         "top_left": [x, y],
@@ -68,7 +73,12 @@ def _build_shape_geometry(cell: dict, cells_by_id: dict[str, dict]) -> tuple[dic
 
 def _is_contained(container: dict, inner: dict, cells_by_id: dict[str, dict]) -> bool:
     """Check whether one shape fully contains another shape."""
-    if container['id'] == inner['id']:
+    container_id = container.get('id')
+    inner_id = inner.get('id')
+    if not container_id or not inner_id:
+        return False
+
+    if container_id == inner_id:
         return False
 
     c_x, c_y, c_w, c_h = _get_absolute_bounds(container, cells_by_id)
@@ -96,7 +106,7 @@ def _get_bind_relationships(cell: dict, cells: list[dict], cells_by_id: dict[str
     contained_by = None
 
     parent_id = cell.get('parent')
-    if parent_id and parent_id not in {"0", "1"} and parent_id in cells_by_id:
+    if parent_id and parent_id not in {"0", DEFAULT_PARENT_ID} and parent_id in cells_by_id:
         contained_by = parent_id
 
     for other in cells:
@@ -109,9 +119,6 @@ def _get_bind_relationships(cell: dict, cells: list[dict], cells_by_id: dict[str
 
         if cell.get('parent') == other['id']:
             contained_by = other['id']
-            continue
-
-        if other.get('parent', "1") != cell.get('parent', "1"):
             continue
 
         if _is_contained(cell, other, cells_by_id):
@@ -127,7 +134,7 @@ def _get_bind_relationships(cell: dict, cells: list[dict], cells_by_id: dict[str
 
 
 def _build_edge_geometry(cell: dict, cells_by_id: dict[str, dict]) -> tuple[list[tuple[str, list[float]]], list[tuple[str, list[float], list[float]]]]:
-    """Build ordered point and segment data for a connection."""
+    """Build edge geometry as (ordered_points, segments) in drawing coordinates."""
     ordered_points: list[tuple[str, list[float]]] = []
 
     source_point = cell.get('source_point')
@@ -266,8 +273,8 @@ def handle_get_cell(arguments: Any) -> list[TextContent]:
         if abs_x != x or abs_y != y:
             cell_info += f"Absolute position (top-left): ({abs_x}, {abs_y})\n"
         cell_info += f"Size: {width} x {height}\n"
-        cell_info += f"Center: ({center_x}, {center_y})\n"
-        cell_info += f"Bounding box: ({abs_x}, {abs_y}) to ({abs_x + width}, {abs_y + height})\n"
+        cell_info += f"Center (absolute): ({center_x}, {center_y})\n"
+        cell_info += f"Bounding box (absolute): ({abs_x}, {abs_y}) to ({abs_x + width}, {abs_y + height})\n"
 
         shape_points, shape_lines = _build_shape_geometry(cell, cells_by_id)
         cell_info += "Points:\n"
