@@ -13,14 +13,183 @@ from .state import diagram_state, safe_float
 from ..xml_operations import get_cells_from_xml, update_cell_in_xml, delete_cell_in_xml
 
 
+def _get_cells() -> list[dict]:
+    """Get cells from the current diagram state."""
+    if diagram_state.current_xml:
+        return get_cells_from_xml(diagram_state.current_xml)
+    if diagram_state.current_diagram:
+        xml_content = diagram_state.current_diagram.to_drawio_xml()
+        return get_cells_from_xml(xml_content)
+    return []
+
+
+def _get_absolute_bounds(cell: dict, cells_by_id: dict[str, dict], seen: set[str] | None = None) -> tuple[float, float, float, float]:
+    """Resolve a cell's absolute bounds, accounting for parent containers."""
+    x = safe_float(cell.get('x'))
+    y = safe_float(cell.get('y'))
+    width = safe_float(cell.get('width'))
+    height = safe_float(cell.get('height'))
+
+    parent_id = cell.get('parent')
+    if parent_id and parent_id not in {"0", "1"}:
+        if seen is None:
+            seen = set()
+        if cell['id'] in seen:
+            return x, y, width, height
+        seen.add(cell['id'])
+
+        parent = cells_by_id.get(parent_id)
+        if parent and parent.get('vertex'):
+            parent_x, parent_y, _, _ = _get_absolute_bounds(parent, cells_by_id, seen)
+            x += parent_x
+            y += parent_y
+
+    return x, y, width, height
+
+
+def _build_shape_geometry(cell: dict, cells_by_id: dict[str, dict]) -> tuple[dict[str, list[float]], list[tuple[str, list[float], list[float]]]]:
+    """Build absolute point and line segment data for a shape."""
+    x, y, width, height = _get_absolute_bounds(cell, cells_by_id)
+    points = {
+        "top_left": [x, y],
+        "top_right": [x + width, y],
+        "bottom_right": [x + width, y + height],
+        "bottom_left": [x, y + height],
+        "center": [x + width / 2, y + height / 2],
+    }
+    lines = [
+        ("top", points["top_left"], points["top_right"]),
+        ("right", points["top_right"], points["bottom_right"]),
+        ("bottom", points["bottom_left"], points["bottom_right"]),
+        ("left", points["top_left"], points["bottom_left"]),
+    ]
+    return points, lines
+
+
+def _is_contained(container: dict, inner: dict, cells_by_id: dict[str, dict]) -> bool:
+    """Check whether one shape fully contains another shape."""
+    if container['id'] == inner['id']:
+        return False
+
+    c_x, c_y, c_w, c_h = _get_absolute_bounds(container, cells_by_id)
+    i_x, i_y, i_w, i_h = _get_absolute_bounds(inner, cells_by_id)
+    if c_w <= 0 or c_h <= 0 or i_w <= 0 or i_h <= 0:
+        return False
+
+    container_area = c_w * c_h
+    inner_area = i_w * i_h
+    if container_area <= inner_area:
+        return False
+
+    return (
+        c_x <= i_x
+        and c_y <= i_y
+        and c_x + c_w >= i_x + i_w
+        and c_y + c_h >= i_y + i_h
+    )
+
+
+def _get_bind_relationships(cell: dict, cells: list[dict], cells_by_id: dict[str, dict]) -> dict[str, list[str] | str | None]:
+    """Collect explicit and containment-based bind relationships for a cell."""
+    explicit = sorted(set(cell.get('bound_nodes', [])))
+    contains = set()
+    contained_by = None
+
+    parent_id = cell.get('parent')
+    if parent_id and parent_id not in {"0", "1"} and parent_id in cells_by_id:
+        contained_by = parent_id
+
+    for other in cells:
+        if not other.get('vertex') or other['id'] == cell['id']:
+            continue
+
+        if other.get('parent') == cell['id']:
+            contains.add(other['id'])
+            continue
+
+        if cell.get('parent') == other['id']:
+            contained_by = other['id']
+            continue
+
+        if other.get('parent', "1") != cell.get('parent', "1"):
+            continue
+
+        if _is_contained(cell, other, cells_by_id):
+            contains.add(other['id'])
+        elif _is_contained(other, cell, cells_by_id):
+            contained_by = other['id']
+
+    return {
+        "explicit": explicit,
+        "contains": sorted(contains),
+        "contained_by": contained_by,
+    }
+
+
+def _build_edge_geometry(cell: dict, cells_by_id: dict[str, dict]) -> tuple[list[tuple[str, list[float]]], list[tuple[str, list[float], list[float]]]]:
+    """Build ordered point and segment data for a connection."""
+    ordered_points: list[tuple[str, list[float]]] = []
+
+    source_point = cell.get('source_point')
+    if source_point:
+        ordered_points.append((
+            "source_point",
+            [safe_float(source_point[0]), safe_float(source_point[1])]
+        ))
+    else:
+        source = cells_by_id.get(cell.get('source'))
+        if source and source.get('vertex'):
+            sx, sy, sw, sh = _get_absolute_bounds(source, cells_by_id)
+            ordered_points.append((
+                "source_anchor",
+                [
+                    sx + sw * safe_float(cell.get('exit_x', 0.5), 0.5),
+                    sy + sh * safe_float(cell.get('exit_y', 0.5), 0.5),
+                ],
+            ))
+
+    for index, waypoint in enumerate(cell.get('waypoints', []), start=1):
+        ordered_points.append((
+            f"waypoint_{index}",
+            [safe_float(waypoint[0]), safe_float(waypoint[1])]
+        ))
+
+    target_point = cell.get('target_point')
+    if target_point:
+        ordered_points.append((
+            "target_point",
+            [safe_float(target_point[0]), safe_float(target_point[1])]
+        ))
+    else:
+        target = cells_by_id.get(cell.get('target'))
+        if target and target.get('vertex'):
+            tx, ty, tw, th = _get_absolute_bounds(target, cells_by_id)
+            ordered_points.append((
+                "target_anchor",
+                [
+                    tx + tw * safe_float(cell.get('entry_x', 0.5), 0.5),
+                    ty + th * safe_float(cell.get('entry_y', 0.5), 0.5),
+                ],
+            ))
+
+    segments = []
+    for index in range(len(ordered_points) - 1):
+        start_name, start_point = ordered_points[index]
+        end_name, end_point = ordered_points[index + 1]
+        segments.append((f"{start_name}->{end_name}", start_point, end_point))
+
+    return ordered_points, segments
+
+
+def _format_point(point: list[float]) -> str:
+    """Format a 2D point for display."""
+    return f"({point[0]:.1f}, {point[1]:.1f})"
+
+
 def handle_list_cells(arguments: Any) -> list[TextContent]:
     """Handle list_cells tool call."""
-    if diagram_state.current_xml:
-        cells = get_cells_from_xml(diagram_state.current_xml)
-    elif diagram_state.current_diagram:
-        xml_content = diagram_state.current_diagram.to_drawio_xml()
-        cells = get_cells_from_xml(xml_content)
-    else:
+    cells = _get_cells()
+    if not cells and not (diagram_state.current_xml or diagram_state.current_diagram):
         return [TextContent(
             type="text",
             text="No diagram available. Create a new diagram or load an existing one."
@@ -30,6 +199,7 @@ def handle_list_cells(arguments: Any) -> list[TextContent]:
         return [TextContent(type="text", text="No cells in the diagram yet.")]
     
     cells_list = []
+    cells_by_id = {cell['id']: cell for cell in cells}
     for cell in cells:
         cell_type = "Shape" if cell['vertex'] else ("Connection" if cell['edge'] else "Unknown")
         label = cell['value'] or "(no label)"
@@ -43,9 +213,16 @@ def handle_list_cells(arguments: Any) -> list[TextContent]:
             center_y = y + height / 2
             pos = f"at ({x}, {y}), size ({width}x{height}), center ({center_x}, {center_y})"
             
-            bound_nodes = cell.get('bound_nodes', [])
-            if bound_nodes:
-                pos += f" [BOUND to: {', '.join(bound_nodes)}]"
+            bind_relationships = _get_bind_relationships(cell, cells, cells_by_id)
+            bind_parts = []
+            if bind_relationships['explicit']:
+                bind_parts.append(f"explicit: {', '.join(bind_relationships['explicit'])}")
+            if bind_relationships['contains']:
+                bind_parts.append(f"contains: {', '.join(bind_relationships['contains'])}")
+            if bind_relationships['contained_by']:
+                bind_parts.append(f"contained_by: {bind_relationships['contained_by']}")
+            if bind_parts:
+                pos += f" [BIND: {'; '.join(bind_parts)}]"
         elif cell['edge']:
             pos = f"from {cell['source']} to {cell['target']}"
         else:
@@ -63,17 +240,15 @@ def handle_get_cell(arguments: Any) -> list[TextContent]:
     """Handle get_cell tool call."""
     cell_id = arguments["cell_id"]
     
-    if diagram_state.current_xml:
-        cells = get_cells_from_xml(diagram_state.current_xml)
-    elif diagram_state.current_diagram:
-        xml_content = diagram_state.current_diagram.to_drawio_xml()
-        cells = get_cells_from_xml(xml_content)
-    else:
+    cells = _get_cells()
+    if not cells and not (diagram_state.current_xml or diagram_state.current_diagram):
         return [TextContent(type="text", text="No diagram available.")]
     
     cell = next((c for c in cells if c['id'] == cell_id), None)
     if not cell:
         return [TextContent(type="text", text=f"Cell not found: {cell_id}")]
+
+    cells_by_id = {item['id']: item for item in cells}
     
     cell_info = f"Cell ID: {cell_id}\n"
     cell_info += f"Type: {'Shape' if cell['vertex'] else 'Connection'}\n"
@@ -84,19 +259,68 @@ def handle_get_cell(arguments: Any) -> list[TextContent]:
         y = safe_float(cell.get('y'))
         width = safe_float(cell.get('width'))
         height = safe_float(cell.get('height'))
-        center_x = x + width / 2
-        center_y = y + height / 2
+        abs_x, abs_y, _, _ = _get_absolute_bounds(cell, cells_by_id)
+        center_x = abs_x + width / 2
+        center_y = abs_y + height / 2
         cell_info += f"Position (top-left): ({x}, {y})\n"
+        if abs_x != x or abs_y != y:
+            cell_info += f"Absolute position (top-left): ({abs_x}, {abs_y})\n"
         cell_info += f"Size: {width} x {height}\n"
         cell_info += f"Center: ({center_x}, {center_y})\n"
-        cell_info += f"Bounding box: ({x}, {y}) to ({x + width}, {y + height})\n"
-        
-        bound_nodes = cell.get('bound_nodes', [])
-        if bound_nodes:
-            cell_info += f"Bound to {len(bound_nodes)} node(s): {', '.join(bound_nodes)}\n"
+        cell_info += f"Bounding box: ({abs_x}, {abs_y}) to ({abs_x + width}, {abs_y + height})\n"
+
+        shape_points, shape_lines = _build_shape_geometry(cell, cells_by_id)
+        cell_info += "Points:\n"
+        for name, point in shape_points.items():
+            cell_info += f"  - {name}: {_format_point(point)}\n"
+
+        cell_info += "Lines:\n"
+        for name, start, end in shape_lines:
+            cell_info += f"  - {name}: {_format_point(start)} -> {_format_point(end)}\n"
+
+        bind_relationships = _get_bind_relationships(cell, cells, cells_by_id)
+        if (
+            bind_relationships['explicit']
+            or bind_relationships['contains']
+            or bind_relationships['contained_by']
+        ):
+            cell_info += "Bind relationships:\n"
+            if bind_relationships['explicit']:
+                cell_info += (
+                    f"  - explicit: {', '.join(bind_relationships['explicit'])}\n"
+                )
+            if bind_relationships['contains']:
+                cell_info += (
+                    f"  - contains: {', '.join(bind_relationships['contains'])}\n"
+                )
+            if bind_relationships['contained_by']:
+                cell_info += (
+                    f"  - contained_by: {bind_relationships['contained_by']}\n"
+                )
     if cell['edge']:
         cell_info += f"Source: {cell['source']}\n"
         cell_info += f"Target: {cell['target']}\n"
+        if cell.get('entry_x') is not None or cell.get('entry_y') is not None:
+            cell_info += (
+                f"Entry anchor (normalized): ({safe_float(cell.get('entry_x', 0.5), 0.5)}, "
+                f"{safe_float(cell.get('entry_y', 0.5), 0.5)})\n"
+            )
+        if cell.get('exit_x') is not None or cell.get('exit_y') is not None:
+            cell_info += (
+                f"Exit anchor (normalized): ({safe_float(cell.get('exit_x', 0.5), 0.5)}, "
+                f"{safe_float(cell.get('exit_y', 0.5), 0.5)})\n"
+            )
+
+        edge_points, edge_lines = _build_edge_geometry(cell, cells_by_id)
+        if edge_points:
+            cell_info += "Points:\n"
+            for name, point in edge_points:
+                cell_info += f"  - {name}: {_format_point(point)}\n"
+
+        if edge_lines:
+            cell_info += "Lines:\n"
+            for name, start, end in edge_lines:
+                cell_info += f"  - {name}: {_format_point(start)} -> {_format_point(end)}\n"
     
     return [TextContent(type="text", text=cell_info)]
 

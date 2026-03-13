@@ -28,6 +28,7 @@ def get_cells_from_xml(xml_content: str) -> list[dict]:
                     'style': cell.getAttribute('style'),
                     'vertex': cell.getAttribute('vertex') == '1',
                     'edge': cell.getAttribute('edge') == '1',
+                    'parent': cell.getAttribute('parent'),
                     'source': cell.getAttribute('source'),
                     'target': cell.getAttribute('target'),
                 }
@@ -63,6 +64,20 @@ def get_cells_from_xml(xml_content: str) -> list[dict]:
                             cell_info['exit_x'] = exit_x
                         if exit_y:
                             cell_info['exit_y'] = exit_y
+
+                        geometry_points = []
+                        if entry_x or entry_y:
+                            geometry_points.append({
+                                'type': 'entry',
+                                'x': entry_x,
+                                'y': entry_y,
+                            })
+                        if exit_x or exit_y:
+                            geometry_points.append({
+                                'type': 'exit',
+                                'x': exit_x,
+                                'y': exit_y,
+                            })
                         
                         # Get waypoints (Array of mxPoint elements)
                         arrays = g.getElementsByTagName('Array')
@@ -74,6 +89,11 @@ def get_cells_from_xml(xml_content: str) -> list[dict]:
                                     y = point.getAttribute('y')
                                     if x and y:
                                         waypoints.append([x, y])
+                                        geometry_points.append({
+                                            'type': 'waypoint',
+                                            'x': x,
+                                            'y': y,
+                                        })
                                 if waypoints:
                                     cell_info['waypoints'] = waypoints
                         
@@ -85,14 +105,26 @@ def get_cells_from_xml(xml_content: str) -> list[dict]:
                                 y = point.getAttribute('y')
                                 if x and y:
                                     cell_info['source_point'] = [x, y]
+                                    geometry_points.append({
+                                        'type': 'sourcePoint',
+                                        'x': x,
+                                        'y': y,
+                                    })
                             elif point_as == 'targetPoint':
                                 x = point.getAttribute('x')
                                 y = point.getAttribute('y')
                                 if x and y:
                                     cell_info['target_point'] = [x, y]
+                                    geometry_points.append({
+                                        'type': 'targetPoint',
+                                        'x': x,
+                                        'y': y,
+                                    })
                             # Note: offset points (as="offset") are label offsets, which are
                             # handled separately through label_offset_x/y parameters in the
                             # Connection model and server tool. No additional parsing needed here.
+                        if geometry_points:
+                            cell_info['geometry_points'] = geometry_points
                 
                 cells.append(cell_info)
         
