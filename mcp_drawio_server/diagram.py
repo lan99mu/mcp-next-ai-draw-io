@@ -17,6 +17,7 @@ LINE_HEIGHT_RATIO = 1.4  # Line height as ratio of font size
 
 # UML diagram constants
 UML_SECTION_SEPARATOR = "───────"  # Unicode box drawing for UML section dividers
+HTML_LINE_BREAK_RE = re.compile(r"<br\s*/?>", re.IGNORECASE)
 
 
 def _format_number(value: float) -> str:
@@ -99,25 +100,31 @@ class Diagram:
         # Check if this is a UML class type that needs section parsing
         uml_class_types = ('uml_class', 'uml_interface', 'uml_abstract_class', 'uml_enum')
         uml_sections = []
-        class_name = label
+        normalized_label = self._normalize_uml_label(label) if shape_type in uml_class_types else label
+        class_name = normalized_label
         
         # Use regex to check for any UML separator:
         # - Box-drawing horizontal lines (3+ ─ characters): ───────
         # - Pipe separators for GraphViz/Mermaid-style labels: |
         has_uml_separator = shape_type in uml_class_types and (
-            re.search(r'─{3,}', label) or 
-            re.search(r'\|', label)
+            re.search(r'─{3,}', normalized_label) or 
+            re.search(r'\|', normalized_label)
         )
         
         if has_uml_separator:
             # Parse the label to extract class name, attributes, and methods
             class_name, uml_sections, calculated_height = self._parse_uml_label(
-                label, width, self.next_id
+                normalized_label, width, self.next_id
             )
             # Update next_id to account for generated section IDs
             self.next_id += len(uml_sections)
             
             # Use calculated height if not using default
+            if height == 60:
+                height = calculated_height
+        elif shape_type == "uml_class":
+            uml_sections, calculated_height = self._create_default_uml_sections(self.next_id)
+            self.next_id += len(uml_sections)
             if height == 60:
                 height = calculated_height
         
@@ -162,7 +169,8 @@ class Diagram:
         2. GraphViz/Mermaid pipe style: "Name|+ attr: type\\\\l|+ method()"
            - Uses | as section separator
            - Uses \\l as line break within sections
-        
+        3. HTML line breaks: "Name<br>───────<br>- attr: type"
+         
         Args:
             label: The full label with sections separated by horizontal lines or pipes
             width: Width of the shape
@@ -176,10 +184,7 @@ class Diagram:
         LINE_HEIGHT = 26
         DIVIDER_HEIGHT = 8
         
-        # Normalize GraphViz-style line breaks to newlines
-        # Matches one or more backslashes followed by 'l' (e.g., \l, \\l)
-        # This handles: "Teacher|+ id: string\l+ name: string\l"
-        normalized_label = re.sub(r'\\+l', '\n', label)
+        normalized_label = self._normalize_uml_label(label)
         
         # Determine which separator to use:
         # 1. First check for box-drawing horizontal lines (─)
@@ -243,6 +248,34 @@ class Diagram:
             total_height += section_height
         
         return class_name, sections, total_height
+
+    def _create_default_uml_sections(self, start_id: int) -> tuple[list[UMLSection], float]:
+        """Create the default attribute and method compartments for a UML class."""
+        header_height = 26
+        line_height = 26
+        divider_height = 8
+
+        sections = [
+            UMLSection(
+                id=f"section_{start_id}",
+                content="",
+                height=line_height,
+                section_type="text"
+            ),
+            UMLSection(
+                id=f"section_{start_id + 1}",
+                content="",
+                height=divider_height,
+                section_type="line"
+            ),
+            UMLSection(
+                id=f"section_{start_id + 2}",
+                content="",
+                height=line_height,
+                section_type="text"
+            ),
+        ]
+        return sections, header_height + line_height + divider_height + line_height
     
     @staticmethod
     def _calculate_text_size(label: str, shape_type: str, font_size: int = 12) -> tuple[float, float]:
@@ -256,7 +289,7 @@ class Diagram:
         Returns:
             Tuple of (width, height)
         """
-        lines = label.split('\n')
+        lines = HTML_LINE_BREAK_RE.sub('\n', label).split('\n')
         max_line_length = max(len(line) for line in lines) if lines else 0
         num_lines = len(lines)
         
@@ -388,9 +421,11 @@ class Diagram:
             
             # Determine parent
             parent_id = shape.parent_id if shape.parent_id else "1"
+            is_uml_class_type = shape.shape_type in ('uml_class', 'uml_interface', 'uml_abstract_class', 'uml_enum')
+            shape_value = self._format_html_label(shape.label) if is_uml_class_type else self._escape_xml(shape.label)
             
             xml_parts.append(
-                f'        <mxCell id="{shape.id}" value="{self._escape_xml(shape.label)}" '
+                f'        <mxCell id="{shape.id}" value="{shape_value}" '
                 f'style="{style}" vertex="1" parent="{parent_id}"{bound_attr}>'
             )
             xml_parts.append(
@@ -406,8 +441,9 @@ class Diagram:
                     if section.section_type == "text":
                         # Text section for attributes or methods
                         text_style = "text;strokeColor=none;fillColor=none;align=left;verticalAlign=top;spacingLeft=4;spacingRight=4;overflow=hidden;rotatable=0;points=[[0,0.5],[1,0.5]];portConstraint=eastwest;whiteSpace=wrap;html=1;"
+                        section_value = self._format_html_label(section.content)
                         xml_parts.append(
-                            f'        <mxCell id="{section.id}" value="{self._escape_xml(section.content)}" '
+                            f'        <mxCell id="{section.id}" value="{section_value}" '
                             f'style="{text_style}" vertex="1" parent="{shape.id}">'
                         )
                         xml_parts.append(
@@ -598,6 +634,18 @@ class Diagram:
                 .replace('>', '&gt;')
                 .replace('"', '&quot;')
                 .replace("'", '&apos;'))
+
+    @staticmethod
+    def _normalize_uml_label(label: str) -> str:
+        """Normalize UML labels so HTML and GraphViz line breaks parse consistently."""
+        normalized = HTML_LINE_BREAK_RE.sub('\n', label)
+        return re.sub(r'\\+l', '\n', normalized)
+
+    @staticmethod
+    def _format_html_label(text: str) -> str:
+        """Format label text as escaped HTML with <br> line breaks."""
+        normalized = HTML_LINE_BREAK_RE.sub('<br>', text).replace('\n', '<br>')
+        return Diagram._escape_xml(normalized)
     
     @staticmethod
     def _get_default_style(shape_type: str) -> str:
