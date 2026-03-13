@@ -644,8 +644,7 @@ class Diagram:
     @staticmethod
     def _format_html_label(text: str) -> str:
         """Format label text as escaped HTML with <br> line breaks."""
-        normalized = HTML_LINE_BREAK_RE.sub('<br>', text).replace('\n', '<br>')
-        return Diagram._escape_xml(normalized)
+        return Diagram._escape_xml(text.replace('\n', '<br>'))
     
     @staticmethod
     def _get_default_style(shape_type: str) -> str:
