@@ -5,7 +5,13 @@ This module provides functions for parsing, reading, and modifying
 Draw.io XML structures.
 """
 
+from typing import Optional
 from xml.dom import minidom
+
+
+def _is_non_empty_string(value: Optional[str]) -> bool:
+    """Return True when an XML attribute contains a non-empty string value."""
+    return value is not None and value != ''
 
 
 def parse_drawio_xml(xml_content: str) -> minidom.Document:
@@ -28,6 +34,7 @@ def get_cells_from_xml(xml_content: str) -> list[dict]:
                     'style': cell.getAttribute('style'),
                     'vertex': cell.getAttribute('vertex') == '1',
                     'edge': cell.getAttribute('edge') == '1',
+                    'parent': cell.getAttribute('parent'),
                     'source': cell.getAttribute('source'),
                     'target': cell.getAttribute('target'),
                 }
@@ -54,7 +61,7 @@ def get_cells_from_xml(xml_content: str) -> list[dict]:
                         entry_y = g.getAttribute('entryY')
                         exit_x = g.getAttribute('exitX')
                         exit_y = g.getAttribute('exitY')
-                        
+
                         if entry_x:
                             cell_info['entry_x'] = entry_x
                         if entry_y:
@@ -63,6 +70,20 @@ def get_cells_from_xml(xml_content: str) -> list[dict]:
                             cell_info['exit_x'] = exit_x
                         if exit_y:
                             cell_info['exit_y'] = exit_y
+
+                        geometry_points = []
+                        if _is_non_empty_string(entry_x) or _is_non_empty_string(entry_y):
+                            geometry_points.append({
+                                'type': 'entry',
+                                'x': entry_x,
+                                'y': entry_y,
+                            })
+                        if _is_non_empty_string(exit_x) or _is_non_empty_string(exit_y):
+                            geometry_points.append({
+                                'type': 'exit',
+                                'x': exit_x,
+                                'y': exit_y,
+                            })
                         
                         # Get waypoints (Array of mxPoint elements)
                         arrays = g.getElementsByTagName('Array')
@@ -74,6 +95,11 @@ def get_cells_from_xml(xml_content: str) -> list[dict]:
                                     y = point.getAttribute('y')
                                     if x and y:
                                         waypoints.append([x, y])
+                                        geometry_points.append({
+                                            'type': 'waypoint',
+                                            'x': x,
+                                            'y': y,
+                                        })
                                 if waypoints:
                                     cell_info['waypoints'] = waypoints
                         
@@ -85,14 +111,26 @@ def get_cells_from_xml(xml_content: str) -> list[dict]:
                                 y = point.getAttribute('y')
                                 if x and y:
                                     cell_info['source_point'] = [x, y]
+                                    geometry_points.append({
+                                        'type': 'sourcePoint',
+                                        'x': x,
+                                        'y': y,
+                                    })
                             elif point_as == 'targetPoint':
                                 x = point.getAttribute('x')
                                 y = point.getAttribute('y')
                                 if x and y:
                                     cell_info['target_point'] = [x, y]
+                                    geometry_points.append({
+                                        'type': 'targetPoint',
+                                        'x': x,
+                                        'y': y,
+                                    })
                             # Note: offset points (as="offset") are label offsets, which are
                             # handled separately through label_offset_x/y parameters in the
                             # Connection model and server tool. No additional parsing needed here.
+                        if geometry_points:
+                            cell_info['geometry_points'] = geometry_points
                 
                 cells.append(cell_info)
         
