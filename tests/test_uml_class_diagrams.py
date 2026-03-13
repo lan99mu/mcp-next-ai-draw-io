@@ -332,10 +332,15 @@ def test_plain_uml_class_creates_default_compartments():
 def test_html_breaks_are_supported_for_uml_labels():
     """Test uml_class parsing accepts HTML <br> line breaks and preserves them in XML."""
     diagram = Diagram("HTML UML Label Test")
-    uml_label_with_html_breaks = (
-        "User<br>───────<br>- id: int<br>- email: string"
-        "<br>───────<br>+ login()<br>+ logout()"
-    )
+    uml_label_with_html_breaks = "<br>".join([
+        "User",
+        "───────",
+        "- id: int",
+        "- email: string",
+        "───────",
+        "+ login()",
+        "+ logout()",
+    ])
 
     shape_id = diagram.add_shape(
         uml_label_with_html_breaks,
