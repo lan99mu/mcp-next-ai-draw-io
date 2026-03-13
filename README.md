@@ -1,108 +1,30 @@
 # MCP Draw.io Server
 
 > ⚠️ **Python 3.10+ Required** | **需要 Python 3.10 或更高版本**
-> 
+>
 > This package requires Python 3.10 or higher. If you see an error like "No matching distribution found for mcp>=1.23.0", please upgrade your Python version first.
-> 
+>
 > 此包需要 Python 3.10 或更高版本。如果您看到类似 "No matching distribution found for mcp>=1.23.0" 的错误，请先升级您的 Python 版本。
 
-A Python-based Model Context Protocol (MCP) server that provides **clean, focused tools** for working with Draw.io diagrams.
+A Python-based Model Context Protocol (MCP) server for creating, inspecting, and editing Draw.io diagrams.
 
-一个基于 Python 的 Model Context Protocol (MCP) 服务器，提供**简洁、专注的工具**来操作 Draw.io 图表。
+一个基于 Python 的 Model Context Protocol (MCP) 服务器，用于创建、检查和编辑 Draw.io 图表。
 
-## 🎯 Design Philosophy / 设计理念
+[中文说明](./README_CN.md)
 
-This MCP server follows the principle of **tool encapsulation** rather than application logic:
+## Quick Start / 快速开始
 
-此 MCP 服务器遵循 **工具封装** 而非应用逻辑的原则：
+### 1. Install / 安装
 
-```
-┌─────────────────┐
-│   Copilot/Agent │  ← Handles strategy, style, reasoning
-│  (策略层)        │     Copilot 负责策略、风格、推理
-└───────▲─────────┘
-        │
-┌───────┴─────────┐
-│  Draw.io MCP    │  ← Provides clean tools, no complex logic
-│  (工具层)        │     提供简洁工具，不做复杂逻辑
-└───────▲─────────┘
-        │
-┌───────┴─────────┐
-│   File System   │  ← Storage layer
-│  (存储层)        │     存储层
-└─────────────────┘
-```
-
-**What this server does / 服务器做什么:**
-- ✅ Provide simple tools to read/write/modify .drawio files
-- ✅ Parse and manipulate diagram structures  
-- ✅ Validate XML format
-- ✅ Expose diagram elements for modification
-
-**What Copilot/Agent does / Copilot/Agent 做什么:**
-- ✅ Decide workflow and strategy
-- ✅ Handle complex reasoning
-- ✅ Manage user intent and style
-- ✅ Coordinate tool usage
-
-## Features / 特性
-
-### Core Capabilities / 核心能力
-
-- 📁 **Load & Save** - Read existing .drawio files and save modifications
-- 🔍 **Inspect** - List and examine diagram elements (cells)  
-- ✏️ **Modify** - Update, add, or delete specific elements by ID
-- 🏗️ **Create** - Build diagrams programmatically from scratch
-- 🔷 **Shape Types** - Support for multiple predefined shapes
-- 🎨 **Styling** - Custom Draw.io style strings for advanced control
-- 📍 **Coordinate System** - Get detailed position information (coordinates, center, bounding box) for better spatial reasoning
-- 🔗 **Node Binding** - Bind nodes together to move them as a group
-- 🔀 **Connection Positioning** - Control entry/exit points and waypoint routing for precise connection placement
-- 🔍 **Line Crossing Detection** - Automatically detect when connections cross and get position hints for adjustments
-- 🎯 **Agent Skills** - MCP Prompts providing workflow templates that reduce model consumption by 60-80%
-- ⚡ **Context Optimization (NEW!)** - 62% reduction in context consumption with on-demand detailed documentation
-
-### Key Improvements Over Basic Version / 相比基础版本的改进
-
-Compared to a simple "generate XML" server, this version provides:
-
-相比简单的"生成 XML"服务器，此版本提供：
-
-1. **File Operations** - Load and modify existing diagrams, not just create new ones
-2. **Element-level Control** - Update/delete specific elements by ID
-3. **Inspection Tools** - Understand diagram structure before modifying
-4. **Flexible Workflows** - Copilot decides how to use tools, not the MCP server
-5. **Efficiency Prompts** - Pre-defined workflow templates that teach agents best practices
-6. **Context Optimization** - Concise tool descriptions with detailed docs on-demand
-
-## Installation / 安装
-
-### Prerequisites / 前置要求
-
-- Python 3.10 or higher
-- MCP-compatible client (VS Code Copilot, Claude Desktop, etc.)
-
-### Setup / 设置
-
-1. Clone the repository:
 ```bash
 git clone https://github.com/lan99mu/mcp-next-ai-draw-io.git
 cd mcp-next-ai-draw-io
-```
-
-2. Install dependencies:
-```bash
 pip install -r requirements.txt
 ```
 
-## Configuration / 配置
+### 2. Configure in MCP Client / 在 MCP 客户端中配置
 
-### For VS Code Copilot
-
-Add to your MCP settings configuration file:
-
-**macOS/Linux**: `~/.config/mcp/settings.json`  
-**Windows**: `%APPDATA%\mcp\settings.json`
+**VS Code Copilot**
 
 ```json
 {
@@ -118,11 +40,7 @@ Add to your MCP settings configuration file:
 }
 ```
 
-### For Claude Desktop
-
-Add to your Claude Desktop configuration:
-
-**macOS**: `~/Library/Application Support/Claude/claude_desktop_config.json`
+**Claude Desktop**
 
 ```json
 {
@@ -136,135 +54,76 @@ Add to your Claude Desktop configuration:
 }
 ```
 
-## Usage Examples / 使用示例
+## User Manual / 使用手册
 
-### Example 1: Create New Diagram / 创建新图表
+### Typical Workflow / 典型工作流
 
+#### A. Create a new diagram / 新建图表
+1. `create_diagram`
+2. `add_shape`
+3. `add_connection`
+4. `save_diagram`
+
+#### B. Modify an existing diagram / 修改现有图表
+1. `load_diagram`
+2. `list_cells`
+3. `get_cell` (optional)
+4. `update_cell` / `delete_cell`
+5. `save_diagram`
+
+#### C. Adjust layout efficiently / 高效调整布局
+1. `list_cells`
+2. `bind_nodes` for related nodes
+3. `move_shape`
+4. `detect_line_crossings` when lines overlap
+
+### Common Operations / 常用操作
+
+| Goal | Recommended tools |
+|------|-------------------|
+| Create a flowchart | `create_diagram` → `add_shape` → `add_connection` |
+| Read a `.drawio` file | `load_diagram` → `list_cells` |
+| Change one node | `update_cell` |
+| Remove one node or edge | `delete_cell` |
+| Move a group together | `bind_nodes` → `move_shape` |
+| Check exact geometry | `get_cell` |
+
+### Text Input Rules / 文本输入规则
+
+- **All labels are handled as HTML labels**, including shape labels and connection labels.
+- **所有文字标签都按 HTML label 处理**，包括图形文本和连线文本。
+- For multiline text, you can pass either `\n` or `<br>`.
+- 多行文本可以使用 `\n` 或 `<br>`。
+- Inline HTML such as `<b>`, `<i>`, `<font color="red">` is preserved for Draw.io rendering.
+- `<b>`、`<i>`、`<font color="red">` 等内联 HTML 会保留给 Draw.io 渲染。
+- If you want the shape to grow with the text, set `auto_size=True`.
+- 如果希望图形跟随文字自动扩展，请设置 `auto_size=True`。
+
+### Example Prompts / 示例提示词
+
+**Create a simple flowchart / 创建简单流程图**
 ```
-User: "Create a simple flowchart with Start, Process, and End nodes"
-
-Copilot will:
-1. Call create_diagram
-2. Call add_shape for each node
-3. Call add_connection to link them
-4. Call save_diagram to save the result
-```
-
-### Example 2: Modify Existing Diagram / 修改现有图表
-
-```
-User: "Load diagram.drawio and change all rectangles to blue"
-
-Copilot will:
-1. Call load_diagram with path
-2. Call list_cells to see all elements
-3. Call update_cell for each rectangle with new style
-4. Call save_diagram to save changes
-```
-
-### Example 3: Inspect and Report / 检查和报告
-
-```
-User: "Show me the structure of architecture.drawio"
-
-Copilot will:
-1. Call load_diagram
-2. Call list_cells to get all elements
-3. Present a summary to the user
-```
-
-## Agent Skills: Workflow Prompts / Agent 技能：工作流提示 🎯
-
-**NEW!** This MCP server now provides **Prompts** - pre-defined workflow templates that help agents work 60-80% more efficiently by teaching best practices.
-
-### What are Prompts? / 什么是提示？
-
-Prompts are reusable workflow templates that:
-- Provide step-by-step guidance for common tasks
-- Teach efficient patterns using node bindings
-- Reduce model consumption by 60-80%
-- Include examples and best practices
-
-### Available Prompts / 可用提示
-
-| Prompt Name | Purpose | Efficiency Gain |
-|------------|---------|-----------------|
-| `create_flowchart` | Create flowcharts efficiently | 60-70% fewer calls |
-| `add_connected_nodes` | Add related nodes with bindings | 2-3 calls saved per adjustment |
-| `optimize_layout` | Fix crossings and improve layout | 70-80% fewer calls |
-| `modify_with_bindings` | Efficiently modify existing diagrams | 3-10 calls saved per modification |
-| `create_architecture_diagram` | Create architecture diagrams with layers | 75-85% fewer calls |
-
-### How to Use Prompts / 如何使用提示
-
-**List all prompts:**
-```
-Call: prompts/list
-Returns: All 5 available prompt templates
+Create a flowchart with Start, Review, Approve, and End.
+Use labeled connections and save it to review.drawio.
 ```
 
-**Get a specific prompt:**
+**Modify an existing diagram / 修改现有图表**
 ```
-Call: prompts/get
-Params:
-  - name: "create_flowchart"
-  - arguments: {"description": "user login process"}
-Returns: Detailed step-by-step workflow
+Load architecture.drawio, list all cells, change the API node to blue,
+and update the connection label between API and DB to "Read<br>Write".
 ```
 
-**Key Benefits:**
-- ✅ **Efficiency**: 60-80% fewer tool calls
-- ✅ **Best Practices**: Learn from proven workflows
-- ✅ **Consistency**: Same approach every time
-- ✅ **Speed**: Faster diagram creation
-
-📖 **See [AGENT_SKILLS.md](./AGENT_SKILLS.md) for detailed documentation and examples.**
-
-## On-Demand Documentation: MCP Resources / 按需文档：MCP 资源 ⚡
-
-**NEW!** This server provides detailed documentation via MCP Resources, reducing initial context consumption by **62%** while keeping comprehensive docs available on-demand.
-
-### Context Optimization / 上下文优化
-
-**Problem:** Verbose tool descriptions consumed too many tokens in VS Code Copilot's context.
-
-**Solution:** 
-- **Concise tool descriptions** - Only essential info (1,010 chars vs 2,669 chars previously)
-- **Detailed docs on-demand** - Access comprehensive guides when needed (15,546 chars available)
-
-### Available Resources / 可用资源
-
-| Resource URI | Content | Size |
-|-------------|---------|------|
-| `docs://tools/overview` | Complete tool documentation with examples | 4,961 chars |
-| `docs://bindings/guide` | Node bindings guide with efficiency patterns | 3,651 chars |
-| `docs://workflows/best-practices` | Workflow patterns and best practices | 3,710 chars |
-| `docs://shapes/reference` | All shape types with usage examples | 3,224 chars |
-
-### How to Access / 如何访问
-
-**List available resources:**
+**Create UML content / 创建 UML 内容**
 ```
-MCP Call: resources/list
+Create a UML class diagram for User and Order.
+Use HTML labels with <br> line breaks for attributes and methods.
 ```
 
-**Read a specific resource:**
-```
-MCP Call: resources/read
-URI: docs://bindings/guide
-```
+## Advanced Documentation / 进阶文档
 
-**Via Copilot Chat:**
-Simply ask: "Show me the bindings guide" or "What are best practices?"
-
-### Benefits / 优势
-
-- ✅ **62% reduction** in initial context consumption
-- ✅ **Detailed docs** - More comprehensive than before
-- ✅ **On-demand** - Only loaded when needed
-- ✅ **Lower costs** - Fewer tokens per request
-
-📖 **See [CONTEXT_OPTIMIZATION.md](./CONTEXT_OPTIMIZATION.md) for complete details.**
+- [AGENT_SKILLS.md](./AGENT_SKILLS.md): prompt templates and workflow patterns
+- [CONTEXT_OPTIMIZATION.md](./CONTEXT_OPTIMIZATION.md): on-demand docs and context optimization
+- `resources/list` / `resources/read`: read built-in MCP documentation resources
 
 ## Tool Reference / 工具参考
 

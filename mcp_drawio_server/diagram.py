@@ -5,6 +5,7 @@ This module provides the Diagram class which manages shapes, connections,
 and generates Draw.io XML format.
 """
 
+import html
 import re
 from typing import Optional
 from datetime import datetime, timezone
@@ -18,6 +19,8 @@ LINE_HEIGHT_RATIO = 1.4  # Line height as ratio of font size
 # UML diagram constants
 UML_SECTION_SEPARATOR = "───────"  # Unicode box drawing for UML section dividers
 HTML_LINE_BREAK_RE = re.compile(r"<br\s*/?>", re.IGNORECASE)
+HTML_BLOCK_BREAK_RE = re.compile(r"</(?:div|p|li|tr|h[1-6])\s*>|<(?:br|hr)\s*/?>", re.IGNORECASE)
+HTML_TAG_RE = re.compile(r"<[^>]+>")
 
 
 def _format_number(value: float) -> str:
@@ -133,10 +136,8 @@ class Diagram:
             calculated_width, calculated_height = self._calculate_text_size(
                 label, shape_type, font_size or 12
             )
-            if width == 120:  # Only override if using default
-                width = max(width, calculated_width)
-            if height == 60:  # Only override if using default
-                height = max(height, calculated_height)
+            width = max(width, calculated_width)
+            height = max(height, calculated_height)
         
         self.shapes[shape_id] = Shape(
             id=shape_id,
@@ -289,7 +290,8 @@ class Diagram:
         Returns:
             Tuple of (width, height)
         """
-        lines = HTML_LINE_BREAK_RE.sub('\n', label).split('\n')
+        plain_text = Diagram._html_to_plain_text(label)
+        lines = plain_text.split('\n') if plain_text else [""]
         max_line_length = max(len(line) for line in lines) if lines else 0
         num_lines = len(lines)
         
@@ -421,8 +423,7 @@ class Diagram:
             
             # Determine parent
             parent_id = shape.parent_id if shape.parent_id else "1"
-            is_uml_class_type = shape.shape_type in ('uml_class', 'uml_interface', 'uml_abstract_class', 'uml_enum')
-            shape_value = self._format_html_label(shape.label) if is_uml_class_type else self._escape_xml(shape.label)
+            shape_value = self._format_html_label(shape.label)
             
             xml_parts.append(
                 f'        <mxCell id="{shape.id}" value="{shape_value}" '
@@ -468,7 +469,7 @@ class Diagram:
             style = self._build_connection_style(conn)
             
             xml_parts.append(
-                f'        <mxCell id="{conn.id}" value="{self._escape_xml(conn.label)}" '
+                f'        <mxCell id="{conn.id}" value="{self._format_html_label(conn.label)}" '
                 f'style="{style}" edge="1" parent="1" source="{conn.source_id}" target="{conn.target_id}">'
             )
             
@@ -644,7 +645,17 @@ class Diagram:
     @staticmethod
     def _format_html_label(text: str) -> str:
         """Format label text as escaped HTML with <br> line breaks."""
-        return Diagram._escape_xml(text.replace('\n', '<br>'))
+        normalized = text.replace('\r\n', '\n').replace('\r', '\n')
+        return Diagram._escape_xml(normalized.replace('\n', '<br>'))
+
+    @staticmethod
+    def _html_to_plain_text(text: str) -> str:
+        """Convert an HTML label into visible plain text for sizing calculations."""
+        normalized = text.replace('\r\n', '\n').replace('\r', '\n')
+        normalized = HTML_BLOCK_BREAK_RE.sub('\n', normalized)
+        normalized = HTML_TAG_RE.sub('', normalized)
+        normalized = html.unescape(normalized)
+        return normalized.strip('\n')
     
     @staticmethod
     def _get_default_style(shape_type: str) -> str:

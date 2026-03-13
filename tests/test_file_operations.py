@@ -76,6 +76,26 @@ def test_load_and_modify():
     return True
 
 
+def test_update_cell_formats_multiline_values_as_html():
+    """Updated cell values should use Draw.io HTML label formatting."""
+    diagram = Diagram(name="Update HTML Test")
+    shape1 = diagram.add_shape("Shape 1", x=100, y=100)
+    shape2 = diagram.add_shape("Shape 2", x=250, y=100)
+    conn = diagram.add_connection(shape1, shape2, label="Connection")
+
+    xml_content = diagram.to_drawio_xml()
+    updated_xml = update_cell_in_xml(
+        xml_content,
+        conn,
+        value="Line 1\n<b>Line 2</b>"
+    )
+
+    updated_cells = get_cells_from_xml(updated_xml)
+    updated_connection = next(c for c in updated_cells if c['id'] == conn)
+
+    assert updated_connection['value'] == "Line 1<br><b>Line 2</b>"
+
+
 if __name__ == "__main__":
     print("=" * 60)
     print("MCP Draw.io Server - File Operations Test")

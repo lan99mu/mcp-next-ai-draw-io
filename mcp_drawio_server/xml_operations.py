@@ -14,6 +14,11 @@ def _is_non_empty_string(value: Optional[str]) -> bool:
     return value is not None and value != ''
 
 
+def _format_html_value(value: str) -> str:
+    """Normalize multiline labels into Draw.io HTML label format."""
+    return value.replace('\r\n', '\n').replace('\r', '\n').replace('\n', '<br>')
+
+
 def parse_drawio_xml(xml_content: str) -> minidom.Document:
     """Parse Draw.io XML and return DOM document"""
     return minidom.parseString(xml_content)
@@ -151,7 +156,7 @@ def update_cell_in_xml(xml_content: str, cell_id: str, **updates) -> str:
             if cell.getAttribute('id') == cell_id:
                 # Update attributes
                 if 'value' in updates and updates['value'] is not None:
-                    cell.setAttribute('value', str(updates['value']))
+                    cell.setAttribute('value', _format_html_value(str(updates['value'])))
                 if 'style' in updates and updates['style'] is not None:
                     cell.setAttribute('style', str(updates['style']))
                 

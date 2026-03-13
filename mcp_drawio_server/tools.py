@@ -88,7 +88,7 @@ def get_tool_definitions() -> list[Tool]:
                     },
                     "value": {
                         "type": "string",
-                        "description": "New label/value for the cell"
+                        "description": "New label/value for the cell. Values are handled as HTML text; use newline characters or <br> for multiline content."
                     },
                     "x": {
                         "type": "number",
@@ -136,7 +136,7 @@ def get_tool_definitions() -> list[Tool]:
                 "properties": {
                     "label": {
                         "type": "string",
-                        "description": "Label text for the shape. For UML class diagram shapes (uml_class, uml_interface, uml_abstract_class, uml_enum), use HTML text with <br> line breaks. Example: 'User<br>───────<br>- id: int<br>───────<br>+ login()'. A plain uml_class label still creates empty attributes and methods compartments."
+                        "description": "Label text for the shape. All labels are handled as HTML text, so multiline content can use either newline characters or <br> line breaks. For UML class diagram shapes (uml_class, uml_interface, uml_abstract_class, uml_enum), use HTML text with <br> line breaks. Example: 'User<br>───────<br>- id: int<br>───────<br>+ login()'. A plain uml_class label still creates empty attributes and methods compartments."
                     },
                     "x": {
                         "type": "number",
@@ -244,7 +244,7 @@ def get_tool_definitions() -> list[Tool]:
                     },
                     "label": {
                         "type": "string",
-                        "description": "Label text for the connection (optional)",
+                        "description": "Label text for the connection (optional). Connection labels are handled as HTML text; use newline characters or <br> for multiline content.",
                         "default": ""
                     },
                     "arrow_type": {

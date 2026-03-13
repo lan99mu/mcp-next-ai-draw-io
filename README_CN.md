@@ -1,102 +1,26 @@
 # MCP Draw.io 服务器
 
 > ⚠️ **需要 Python 3.10 或更高版本**
-> 
+>
 > 此包需要 Python 3.10 或更高版本。如果您看到类似 "No matching distribution found for mcp>=1.23.0" 的错误，请先升级您的 Python 版本。
 
-基于 Python 的 Model Context Protocol (MCP) 服务器，提供**简洁、专注的工具**来操作 Draw.io 图表。
+基于 Python 的 Model Context Protocol (MCP) 服务器，用于创建、检查和编辑 Draw.io 图表。
 
 [English](./README.md) | 中文
 
-## 🎯 设计理念
+## 快速开始
 
-此 MCP 服务器遵循 **工具封装** 而非应用逻辑的原则：
+### 1. 安装
 
-```
-┌─────────────────┐
-│   Copilot/Agent │  ← 负责策略、风格、推理
-│    (策略层)      │
-└───────▲─────────┘
-        │
-┌───────┴─────────┐
-│  Draw.io MCP    │  ← 提供简洁工具，不做复杂逻辑
-│    (工具层)      │
-└───────▲─────────┘
-        │
-┌───────┴─────────┐
-│   File System   │  ← 存储层
-│    (存储层)      │
-└─────────────────┘
-```
-
-**服务器负责:**
-- ✅ 提供简单的工具来读取/写入/修改 .drawio 文件
-- ✅ 解析和操作图表结构
-- ✅ 验证 XML 格式
-- ✅ 暴露图表元素以供修改
-
-**Copilot/Agent 负责:**
-- ✅ 决定工作流和策略
-- ✅ 处理复杂推理
-- ✅ 管理用户意图和风格
-- ✅ 协调工具使用
-
-## 特性
-
-### 核心能力
-
-- 📁 **加载和保存** - 读取现有 .drawio 文件并保存修改
-- 🔍 **检查** - 列出和检查图表元素（单元格）
-- ✏️ **修改** - 通过 ID 更新、添加或删除特定元素
-- 🏗️ **创建** - 从头开始以编程方式构建图表
-- 🔷 **形状类型** - 支持多种预定义形状
-- 🎨 **样式** - 自定义 Draw.io 样式字符串以实现高级控制
-- 📍 **坐标系统** - 获取详细的位置信息（坐标、中心点、边界框）以便更好地进行空间推理
-- 🔗 **节点绑定** - 将节点绑定在一起，作为一组移动
-- 🔀 **连接定位** - 控制入口/出口点和路径点，实现精确的连接位置
-- 🔍 **连线交叉检测** - 自动检测连线交叉并提供位置调整提示
-- 🎯 **Agent 技能** - MCP 提示（Prompts）提供工作流模板，减少 60-80% 的模型调用
-- ⚡ **上下文优化（新功能！）** - 减少 62% 的上下文消耗，并提供按需详细文档
-
-### 相比基础版本的改进
-
-相比简单的"生成 XML"服务器，此版本提供：
-
-1. **文件操作** - 加载和修改现有图表，而不仅仅是创建新图表
-2. **元素级控制** - 通过 ID 更新/删除特定元素
-3. **检查工具** - 在修改之前了解图表结构
-4. **灵活的工作流** - Copilot 决定如何使用工具，而不是 MCP 服务器
-5. **效率提示** - 预定义的工作流模板，教会 agent 最佳实践
-6. **上下文优化** - 简洁的工具描述，按需提供详细文档
-
-## 安装
-
-### 前置要求
-
-- Python 3.10 或更高版本
-- MCP 兼容的客户端（VS Code Copilot、Claude Desktop 等）
-
-### 设置
-
-1. 克隆仓库：
 ```bash
 git clone https://github.com/lan99mu/mcp-next-ai-draw-io.git
 cd mcp-next-ai-draw-io
-```
-
-2. 安装依赖：
-```bash
 pip install -r requirements.txt
 ```
 
-## 配置
+### 2. 在 MCP 客户端中配置
 
-### VS Code Copilot
-
-在 MCP 设置配置文件中添加：
-
-**macOS/Linux**: `~/.config/mcp/settings.json`  
-**Windows**: `%APPDATA%\mcp\settings.json`
+**VS Code Copilot**
 
 ```json
 {
@@ -112,11 +36,7 @@ pip install -r requirements.txt
 }
 ```
 
-### Claude Desktop
-
-在 Claude Desktop 配置文件中添加：
-
-**macOS**: `~/Library/Application Support/Claude/claude_desktop_config.json`
+**Claude Desktop**
 
 ```json
 {
@@ -130,135 +50,72 @@ pip install -r requirements.txt
 }
 ```
 
-## 使用示例
+## 使用手册
 
-### 示例 1：创建新图表
+### 典型工作流
 
+#### A. 新建图表
+1. `create_diagram`
+2. `add_shape`
+3. `add_connection`
+4. `save_diagram`
+
+#### B. 修改现有图表
+1. `load_diagram`
+2. `list_cells`
+3. `get_cell`（可选）
+4. `update_cell` / `delete_cell`
+5. `save_diagram`
+
+#### C. 高效调整布局
+1. `list_cells`
+2. 对相关节点使用 `bind_nodes`
+3. 使用 `move_shape`
+4. 连线交叉时使用 `detect_line_crossings`
+
+### 常用操作
+
+| 目标 | 推荐工具 |
+|------|----------|
+| 新建流程图 | `create_diagram` → `add_shape` → `add_connection` |
+| 读取 `.drawio` 文件 | `load_diagram` → `list_cells` |
+| 修改单个节点 | `update_cell` |
+| 删除节点或连线 | `delete_cell` |
+| 成组移动节点 | `bind_nodes` → `move_shape` |
+| 查看精确坐标/几何信息 | `get_cell` |
+
+### 文本输入规则
+
+- **所有标签都会按 HTML label 处理**，包括图形文本和连线文本。
+- 多行文本可以使用 `\n` 或 `<br>`。
+- `<b>`、`<i>`、`<font color="red">` 等内联 HTML 会保留给 Draw.io 渲染。
+- 如果希望图形跟随文字自动扩展，请设置 `auto_size=True`。
+
+### 示例提示词
+
+**创建简单流程图**
 ```
-用户："创建一个包含开始、处理和结束节点的简单流程图"
-
-Copilot 将：
-1. 调用 create_diagram
-2. 为每个节点调用 add_shape
-3. 调用 add_connection 链接它们
-4. 调用 save_diagram 保存结果
-```
-
-### 示例 2：修改现有图表
-
-```
-用户："加载 diagram.drawio 并将所有矩形改为蓝色"
-
-Copilot 将：
-1. 调用 load_diagram 指定路径
-2. 调用 list_cells 查看所有元素
-3. 为每个矩形调用 update_cell 更新样式
-4. 调用 save_diagram 保存更改
-```
-
-### 示例 3：检查和报告
-
-```
-用户："显示 architecture.drawio 的结构"
-
-Copilot 将：
-1. 调用 load_diagram
-2. 调用 list_cells 获取所有元素
-3. 向用户呈现摘要
-```
-
-## Agent 技能：工作流提示 🎯
-
-**新功能！** 此 MCP 服务器现在提供 **提示（Prompts）** - 预定义的工作流模板，通过教授最佳实践帮助 agent 提高 60-80% 的工作效率。
-
-### 什么是提示？
-
-提示是可重用的工作流模板，它们：
-- 为常见任务提供分步指导
-- 教授使用节点绑定的高效模式
-- 减少 60-80% 的模型调用
-- 包含示例和最佳实践
-
-### 可用提示
-
-| 提示名称 | 用途 | 效率提升 |
-|---------|------|---------|
-| `create_flowchart` | 高效创建流程图 | 减少 60-70% 调用 |
-| `add_connected_nodes` | 添加带绑定的相关节点 | 每次调整节省 2-3 次调用 |
-| `optimize_layout` | 修复交叉并改善布局 | 减少 70-80% 调用 |
-| `modify_with_bindings` | 高效修改现有图表 | 每次修改节省 3-10 次调用 |
-| `create_architecture_diagram` | 创建分层架构图 | 减少 75-85% 调用 |
-
-### 如何使用提示
-
-**列出所有提示：**
-```
-调用: prompts/list
-返回: 所有 5 个可用的提示模板
+创建一个包含 Start、Review、Approve、End 的流程图。
+为连线添加标签，并保存到 review.drawio。
 ```
 
-**获取特定提示：**
+**修改现有图表**
 ```
-调用: prompts/get
-参数:
-  - name: "create_flowchart"
-  - arguments: {"description": "用户登录流程"}
-返回: 详细的分步工作流
+加载 architecture.drawio，列出所有 cells，把 API 节点改成蓝色，
+并把 API 到 DB 的连线标签改成 "Read<br>Write"。
 ```
 
-**主要优势：**
-- ✅ **效率**: 减少 60-80% 的工具调用
-- ✅ **最佳实践**: 从经过验证的工作流中学习
-- ✅ **一致性**: 每次使用相同的方法
-- ✅ **速度**: 更快地创建图表
-
-📖 **详细文档和示例请参见 [AGENT_SKILLS.md](./AGENT_SKILLS.md)。**
-
-## 按需文档：MCP 资源 ⚡
-
-**新功能！** 此服务器通过 MCP 资源提供详细文档，将初始上下文消耗减少 **62%**，同时保持全面的文档可按需访问。
-
-### 上下文优化
-
-**问题：** 冗长的工具描述在 VS Code Copilot 的上下文中消耗了太多 token。
-
-**解决方案：**
-- **简洁的工具描述** - 仅包含基本信息（从 2,669 字符减少到 1,010 字符）
-- **按需详细文档** - 需要时访问全面指南（可用 15,546 字符）
-
-### 可用资源
-
-| 资源 URI | 内容 | 大小 |
-|---------|------|------|
-| `docs://tools/overview` | 完整的工具文档和示例 | 4,961 字符 |
-| `docs://bindings/guide` | 节点绑定指南及效率模式 | 3,651 字符 |
-| `docs://workflows/best-practices` | 工作流模式和最佳实践 | 3,710 字符 |
-| `docs://shapes/reference` | 所有形状类型及使用示例 | 3,224 字符 |
-
-### 如何访问
-
-**列出可用资源：**
+**创建 UML 图**
 ```
-MCP 调用: resources/list
+创建 User 和 Order 的 UML 类图。
+属性和方法使用带 <br> 换行的 HTML label。
 ```
 
-**读取特定资源：**
-```
-MCP 调用: resources/read
-URI: docs://bindings/guide
-```
+## 进阶文档
 
-**通过 Copilot 聊天：**
-直接询问："显示绑定指南" 或 "最佳实践是什么？"
-
-### 优势
-
-- ✅ **减少 62%** 的初始上下文消耗
-- ✅ **详细文档** - 比以前更全面
-- ✅ **按需加载** - 仅在需要时加载
-- ✅ **降低成本** - 每次请求使用更少的 token
-
-📖 **完整详情请参见 [CONTEXT_OPTIMIZATION.md](./CONTEXT_OPTIMIZATION.md)。**
+- [AGENT_SKILLS.md](./AGENT_SKILLS.md)：提示模板与工作流模式
+- [CONTEXT_OPTIMIZATION.md](./CONTEXT_OPTIMIZATION.md)：按需文档与上下文优化
+- `resources/list` / `resources/read`：读取内置 MCP 资源文档
 
 ## 工具参考
 
