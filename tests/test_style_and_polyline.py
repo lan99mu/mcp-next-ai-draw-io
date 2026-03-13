@@ -331,6 +331,57 @@ def test_auto_size_calculation():
     assert diagram.shapes[long_id].width > 120  # Default is 120
 
 
+def test_labels_are_exported_as_html_for_shapes_and_connections():
+    """All shape and connection labels should use Draw.io HTML label formatting."""
+    diagram = Diagram("HTML Label Test")
+
+    source_id = diagram.add_shape(
+        label="Title\n<div>Body</div>",
+        x=100, y=100
+    )
+    target_id = diagram.add_shape(
+        label="Target",
+        x=320, y=100
+    )
+    diagram.add_connection(
+        source_id=source_id,
+        target_id=target_id,
+        label="Line 1\n<b>Bold</b>"
+    )
+
+    xml = diagram.to_drawio_xml()
+
+    assert 'Title&lt;br&gt;&lt;div&gt;Body&lt;/div&gt;' in xml
+    assert 'Line 1&lt;br&gt;&lt;b&gt;Bold&lt;/b&gt;' in xml
+
+
+def test_auto_size_expands_custom_dimensions_and_ignores_html_tags():
+    """Auto-size should expand past custom minimums using visible text, not raw HTML tags."""
+    diagram = Diagram("HTML Auto Size Test")
+
+    html_id = diagram.add_shape(
+        label="Short <b>wide</b>",
+        x=100, y=100,
+        width=60,
+        height=20,
+        auto_size=True
+    )
+    multi_line_id = diagram.add_shape(
+        label="<div>Line 1</div><div>Line 2</div>",
+        x=100, y=200,
+        width=60,
+        height=20,
+        auto_size=True
+    )
+
+    html_shape = diagram.shapes[html_id]
+    multi_line_shape = diagram.shapes[multi_line_id]
+
+    assert 100 <= html_shape.width < 140
+    assert html_shape.height > 20
+    assert multi_line_shape.height > html_shape.height
+
+
 def test_parent_child_relationship():
     """Test parent-child container relationship."""
     diagram = Diagram("Parent Child Test")
@@ -521,4 +572,3 @@ if __name__ == "__main__":
     print("\n" + "=" * 50)
     print("✓ All style and polyline tests passed!")
     print("=" * 50)
-
