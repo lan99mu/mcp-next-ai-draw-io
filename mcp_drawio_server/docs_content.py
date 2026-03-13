@@ -566,6 +566,7 @@ Generic container for grouping. Supports parent_id for child shapes.
 
 ### uml_class
 Standard class box with three sections (name, attributes, methods).
+Use HTML text with `<br>` line breaks for UML labels. If only the class name is provided, `uml_class` still creates empty attributes and methods compartments.
 
 ### uml_interface
 Interface representation (class with «interface» stereotype).
@@ -705,7 +706,7 @@ Use `auto_size=True` to automatically calculate shape dimensions based on text c
 ```python
 # Shape will auto-size to fit the text
 class_shape = add_shape(
-    label="UserService\\n---\\n+userId: int\\n+name: string\\n+email: string\\n---\\n+getUser()\\n+updateUser()",
+    label="UserService<br>───────<br>+userId: int<br>+name: string<br>+email: string<br>───────<br>+getUser()<br>+updateUser()",
     shape_type="uml_class",
     auto_size=True
 )

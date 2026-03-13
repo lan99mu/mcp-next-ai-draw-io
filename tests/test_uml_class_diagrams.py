@@ -306,6 +306,61 @@ def test_pipe_separated_uml_label():
     print(f"  - Methods: 2 methods")
 
 
+def test_plain_uml_class_creates_default_compartments():
+    """Test uml_class always creates the standard three-compartment structure."""
+    diagram = Diagram("Default UML Compartments Test")
+
+    shape_id = diagram.add_shape(
+        "Invoice",
+        x=40, y=60,
+        shape_type="uml_class"
+    )
+
+    shape = diagram.shapes[shape_id]
+    text_sections = [section for section in shape.uml_sections if section.section_type == "text"]
+    line_sections = [section for section in shape.uml_sections if section.section_type == "line"]
+
+    assert shape.label == "Invoice"
+    assert len(text_sections) == 2
+    assert len(line_sections) == 1
+    assert shape.height == 86
+
+    xml = diagram.to_drawio_xml()
+    assert f'parent="{shape_id}"' in xml
+
+
+def test_html_breaks_are_supported_for_uml_labels():
+    """Test uml_class parsing accepts HTML <br> line breaks and preserves them in XML."""
+    diagram = Diagram("HTML UML Label Test")
+    uml_label_with_html_breaks = "<br>".join([
+        "User",
+        "───────",
+        "- id: int",
+        "- email: string",
+        "───────",
+        "+ login()",
+        "+ logout()",
+    ])
+
+    shape_id = diagram.add_shape(
+        uml_label_with_html_breaks,
+        x=20, y=20,
+        shape_type="uml_class"
+    )
+
+    shape = diagram.shapes[shape_id]
+    text_sections = [section for section in shape.uml_sections if section.section_type == "text"]
+
+    assert shape.label == "User"
+    assert len(text_sections) == 2
+    assert text_sections[0].content == "- id: int\n- email: string"
+    assert text_sections[1].content == "+ login()\n+ logout()"
+
+    xml = diagram.to_drawio_xml()
+    assert "- id: int&lt;br&gt;- email: string" in xml
+    assert "+ login()&lt;br&gt;+ logout()" in xml
+
+
 if __name__ == "__main__":
     print("Testing UML Class Diagram Support")
     print("=" * 50)
