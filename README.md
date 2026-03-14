@@ -122,6 +122,7 @@ Use HTML labels with <br> line breaks for attributes and methods.
 ## Advanced Documentation / 进阶文档
 
 - [AGENT_SKILLS.md](./AGENT_SKILLS.md): prompt templates and workflow patterns
+- [skill.md](./skill.md): repository-specific draw.io authoring workflow and conventions
 - [CONTEXT_OPTIMIZATION.md](./CONTEXT_OPTIMIZATION.md): on-demand docs and context optimization
 - `resources/list` / `resources/read`: read built-in MCP documentation resources
 
