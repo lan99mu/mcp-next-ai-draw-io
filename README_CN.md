@@ -114,7 +114,7 @@ pip install -r requirements.txt
 ## 进阶文档
 
 - [AGENT_SKILLS.md](./AGENT_SKILLS.md)：提示模板与工作流模式
-- [skill.md](./skill.md)：仓库内 draw.io 画图工作流与命名规范
+- [SKILL.md](./SKILL.md)：仓库内 draw.io 画图工作流与命名规范
 - [CONTEXT_OPTIMIZATION.md](./CONTEXT_OPTIMIZATION.md)：按需文档与上下文优化
 - `resources/list` / `resources/read`：读取内置 MCP 资源文档
 
