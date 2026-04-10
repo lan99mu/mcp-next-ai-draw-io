@@ -1,8 +1,11 @@
 #!/usr/bin/env python3
 """
-MCP Prompts for Draw.io Server.
+MCP Prompts for Draw.io Server — Progressive Guidance.
 
-This module contains prompt definitions and handlers for workflow templates.
+Three-phase workflow:
+  1. plan_diagram  — clarify structure before drawing
+  2. draw_diagram  — create shapes and connections
+  3. review_diagram — optimize layout and fix issues
 """
 
 from mcp.types import (
@@ -11,352 +14,178 @@ from mcp.types import (
 
 
 def get_prompt_definitions() -> list[Prompt]:
-    """Return all available prompt template definitions."""
+    """Return progressive prompt definitions (plan → draw → review)."""
     return [
         Prompt(
-            name="create_flowchart",
-            description="Efficiently create a flowchart diagram with proper node placement and automatic bindings for related elements. This workflow guides you through creating nodes, connecting them, and using bindings to group related elements.",
+            name="plan_diagram",
+            description="Phase 1: Clarify diagram structure before drawing. Outputs a node/connection plan.",
             arguments=[
                 PromptArgument(
                     name="description",
-                    description="High-level description of the flowchart (e.g., 'user login process', 'order fulfillment workflow')",
+                    description="What the diagram should represent (e.g., 'user login flow', 'microservices architecture')",
                     required=True
+                ),
+                PromptArgument(
+                    name="diagram_type",
+                    description="Diagram type: flowchart, architecture, uml_class, activity, swimlane",
+                    required=False
                 )
             ]
         ),
         Prompt(
-            name="add_connected_nodes",
-            description="Add multiple related nodes with connections and automatic bindings. Best for extending existing diagrams efficiently by creating a group of related nodes that can be moved together.",
+            name="draw_diagram",
+            description="Phase 2: Create shapes and connections based on a plan. Call this after plan_diagram.",
             arguments=[
                 PromptArgument(
-                    name="nodes_description",
-                    description="Description of the nodes to add and their relationships (e.g., 'service, database, and cache nodes connected in sequence')",
+                    name="plan",
+                    description="The structured plan from phase 1 (nodes and connections to create)",
                     required=True
                 ),
                 PromptArgument(
-                    name="base_x",
-                    description="Starting X coordinate for the new nodes (optional, default: 0)",
-                    required=False
-                ),
-                PromptArgument(
-                    name="base_y", 
-                    description="Starting Y coordinate for the new nodes (optional, default: 0)",
+                    name="file_path",
+                    description="Path to save the .drawio file (optional)",
                     required=False
                 )
             ]
         ),
         Prompt(
-            name="optimize_layout",
-            description="Optimize diagram layout by detecting and fixing line crossings, suggesting bindings, and improving spacing. This helps clean up messy diagrams with minimal manual adjustments.",
+            name="review_diagram",
+            description="Phase 3: Optimize layout — detect crossings, suggest bindings, fix spacing.",
             arguments=[]
         ),
-        Prompt(
-            name="modify_with_bindings",
-            description="Efficiently modify an existing diagram by leveraging node bindings. This workflow shows how to check existing bindings and use them to make local adjustments by moving just one node instead of many.",
-            arguments=[
-                PromptArgument(
-                    name="modification_description",
-                    description="Description of what to modify (e.g., 'move the authentication section down', 'adjust database cluster spacing')",
-                    required=True
-                )
-            ]
-        ),
-        Prompt(
-            name="create_architecture_diagram",
-            description="Create a software architecture diagram with proper layering and component grouping. Uses bindings to group related components that should move together.",
-            arguments=[
-                PromptArgument(
-                    name="architecture_description",
-                    description="Description of the architecture (e.g., '3-tier web application', 'microservices with API gateway')",
-                    required=True
-                )
-            ]
-        )
     ]
 
 
 def get_prompt_result(name: str, arguments: dict[str, str] | None) -> GetPromptResult:
-    """Get a specific prompt template with instructions."""
-    
-    if name == "create_flowchart":
-        description = arguments.get("description", "a flowchart") if arguments else "a flowchart"
-        
+    """Get a specific prompt template with progressive instructions."""
+
+    if name == "plan_diagram":
+        description = (arguments or {}).get("description", "a diagram")
+        diagram_type = (arguments or {}).get("diagram_type", "")
+
+        type_hint = ""
+        if diagram_type:
+            type_hints = {
+                "flowchart": "Use shape_type: rectangle for steps, diamond for decisions, ellipse for start/end.",
+                "architecture": "Use rectangle/cylinder/cloud. Group by layer (UI → API → Data). Space layers 250px apart vertically.",
+                "uml_class": "Use shape_type: uml_class. Label format: 'ClassName<br>───────<br>- attr: type<br>───────<br>+ method()'.",
+                "activity": "Use activity_start/end/action/decision/fork/join shapes.",
+                "swimlane": "Use swimlane_pool + swimlane_h/swimlane_v. Place child shapes inside with parent_id.",
+            }
+            type_hint = type_hints.get(diagram_type, "")
+
         return GetPromptResult(
-            description=f"Create {description} efficiently using bindings",
+            description=f"Plan: {description}",
             messages=[
                 PromptMessage(
                     role="user",
                     content=TextContent(
                         type="text",
-                        text=f"""Create a flowchart for: {description}
+                        text=f"""Plan a diagram for: {description}
 
-WORKFLOW (follow this order to minimize model calls):
+TASK: Produce a structured plan — do NOT call any tools yet.
 
-1. **Plan the structure**: Think about the main steps and their relationships
-2. **Create nodes in logical groups**: 
-   - Use add_shape() to create related nodes (e.g., all decision nodes, all process nodes)
-   - Place them with proper spacing (150-200px between nodes)
-3. **Bind related nodes immediately**:
-   - After creating a group of related nodes, use bind_nodes() to group them
-   - Example: bind_nodes(node_ids=["start", "process1", "decision1"])
-   - This allows you to move the entire group by adjusting just ONE node later
-4. **Add connections**: 
-   - Use add_connection() between nodes
-   - Set proper entry/exit points for clean routing
-5. **Use suggest_bindings()**: 
-   - Check for additional binding opportunities
-   - Bind nodes that should move together
-6. **Check for crossings**:
-   - Use detect_line_crossings() to identify issues
-   - Fix by moving just ONE node from bound groups (all bound nodes move automatically)
+1. List every node with: label, shape_type, approximate (x, y), width, height
+2. List every connection with: source → target, label, arrow_type
+3. Identify groups of related nodes that should be bound together
+4. Note the recommended spacing:
+   - Vertical: 150–200px between rows
+   - Horizontal: 200–250px between columns
 
-BEST PRACTICES:
-✓ Bind nodes EARLY (right after creation)
-✓ Use vertical spacing of 150-200px between levels
-✓ Use horizontal spacing of 200-250px between parallel paths
-✓ Move bound groups by adjusting just ONE node, not all nodes individually
-✓ Check suggest_bindings() after creating the initial structure
+{f"TYPE HINT: {type_hint}" if type_hint else ""}
 
-This approach reduces model calls by 60-80% compared to adjusting each node individually!"""
+OUTPUT FORMAT (example):
+```
+NODES:
+  1. "Start"        ellipse       x=200  y=50   80x80
+  2. "Validate"     rectangle     x=170  y=200  120x60
+  3. "Valid?"        diamond       x=180  y=320  100x80
+
+CONNECTIONS:
+  Start → Validate              label=""
+  Validate → Valid?             label="check"
+
+BINDINGS:
+  Group A: [Start, Validate, Valid?]
+```
+
+After confirming the plan, proceed with the `draw_diagram` prompt."""
                     )
                 )
             ]
         )
-    
-    elif name == "add_connected_nodes":
-        nodes_desc = arguments.get("nodes_description", "related nodes") if arguments else "related nodes"
-        base_x = arguments.get("base_x", "0") if arguments else "0"
-        base_y = arguments.get("base_y", "0") if arguments else "0"
-        
+
+    elif name == "draw_diagram":
+        plan = (arguments or {}).get("plan", "")
+        file_path = (arguments or {}).get("file_path", "")
+
+        save_step = ""
+        if file_path:
+            save_step = f"\n5. **Save**: `save_diagram(path=\"{file_path}\")`"
+        else:
+            save_step = "\n5. **Save**: Ask the user for a file path, then `save_diagram(path=...)`"
+
         return GetPromptResult(
-            description=f"Add {nodes_desc} with automatic bindings",
+            description="Draw diagram from plan",
             messages=[
                 PromptMessage(
                     role="user",
                     content=TextContent(
                         type="text",
-                        text=f"""Add {nodes_desc} to the diagram starting at position ({base_x}, {base_y})
+                        text=f"""Execute the following plan by calling tools in order:
 
-EFFICIENT WORKFLOW:
+PLAN:
+{plan}
 
-1. **List existing cells** to understand the current diagram:
-   - Use list_cells() to see what already exists
-   - Note any existing bindings (shown as [BOUND to: ...])
-   
-2. **Create all new nodes in one batch**:
-   - Use add_shape() for each node with proper spacing
-   - Keep track of the created node IDs
-   
-3. **Bind the new nodes together IMMEDIATELY**:
-   - Use bind_nodes(node_ids=[id1, id2, id3, ...])
-   - This creates a movable group
-   
-4. **Add connections**:
-   - Connect the nodes using add_connection()
-   - Connect to existing nodes if needed
-   
-5. **Verify and optimize**:
-   - Use suggest_bindings() to check if these new nodes should be bound to existing nodes
-   - If the new nodes should move with existing groups, add those bindings too
+STEPS:
+1. **Create diagram**: `create_diagram()`
+2. **Add all shapes**: Call `add_shape(...)` for each node in the plan.
+   - Use exact (x, y, width, height) from the plan
+   - Record the returned shape IDs
+3. **Bind related groups**: Call `bind_nodes(node_ids=[...])` for each binding group
+4. **Add connections**: Call `add_connection(source_id=..., target_id=..., ...)` for each edge{save_step}
 
-EXAMPLE:
-```
-# Create nodes
-svc_id = add_shape(label="Service", x=100, y=100)
-db_id = add_shape(label="Database", x=100, y=200) 
-cache_id = add_shape(label="Cache", x=250, y=200)
+RULES:
+- Create ALL shapes before adding connections
+- Bind groups IMMEDIATELY after creating their shapes
+- Use entry_x/entry_y/exit_x/exit_y for precise connection points when layout matters
 
-# Bind immediately - this is KEY for efficiency!
-bind_nodes(node_ids=[svc_id, db_id, cache_id])
-
-# Add connections
-add_connection(source_id=svc_id, target_id=db_id)
-add_connection(source_id=svc_id, target_id=cache_id)
-
-# Now moving any ONE of these nodes moves all 3 together!
-```
-
-This saves 2-3 tool calls per adjustment compared to moving nodes individually."""
+After drawing, use the `review_diagram` prompt to optimize."""
                     )
                 )
             ]
         )
-    
-    elif name == "optimize_layout":
+
+    elif name == "review_diagram":
         return GetPromptResult(
-            description="Optimize diagram layout with minimal adjustments",
+            description="Review and optimize diagram layout",
             messages=[
                 PromptMessage(
                     role="user",
                     content=TextContent(
                         type="text",
-                        text="""Optimize the current diagram layout efficiently
+                        text="""Review the current diagram and optimize its layout:
 
-OPTIMIZATION WORKFLOW:
+STEPS:
+1. **Inspect**: `list_cells()` — check positions, overlaps, and binding info
+2. **Detect crossings**: `detect_line_crossings()` — find overlapping connections
+3. **Suggest bindings**: `suggest_bindings()` — discover ungrouped related nodes
+4. **Fix issues**:
+   - Bind suggested groups: `bind_nodes(node_ids=[...])`
+   - Move nodes to fix crossings: `move_shape(...)` (bound nodes follow)
+   - Adjust waypoints or entry/exit points if connections overlap
+5. **Verify**: Run `detect_line_crossings()` again to confirm fixes
+6. **Save**: `save_diagram(path=...)` when satisfied
 
-1. **Detect crossings**:
-   - Use detect_line_crossings() to find all crossing issues
-   - This identifies which nodes need adjustment
-   
-2. **Suggest bindings** before making changes:
-   - Use suggest_bindings() to identify nodes that should move together
-   - Bind related nodes BEFORE adjusting positions
-   - This ensures when you move one node, related nodes move too
-   
-3. **Apply bindings strategically**:
-   - For each high-scoring suggestion, use bind_nodes()
-   - Focus on binding nodes that are:
-     * Close together (proximity)
-     * Have matching names (same prefix/suffix)
-     * Are functionally related (service+db, ui+api, etc.)
-   
-4. **Fix crossings with minimal moves**:
-   - For each crossing, move just ONE node from the bound group
-   - All bound nodes will move automatically
-   - Verify crossings are resolved with detect_line_crossings()
-   
-5. **Final spacing check**:
-   - Use suggest_bindings() again to see if any new opportunities emerged
-   - Verify layout looks clean with list_cells()
-
-EFFICIENCY GAIN:
-- Without bindings: Need to move each node individually = 5-10 tool calls per section
-- With bindings: Move one node per bound group = 1-2 tool calls per section
-- Result: 70-80% reduction in tool calls
-
-IMPORTANT: Always bind BEFORE moving nodes to maximize efficiency!"""
+COMMON FIXES:
+- Overlapping shapes → increase spacing (move_shape)
+- Crossed connections → add waypoints or adjust entry/exit points
+- Unbound related nodes → bind_nodes to group them"""
                     )
                 )
             ]
         )
-    
-    elif name == "modify_with_bindings":
-        modification = arguments.get("modification_description", "the diagram") if arguments else "the diagram"
-        
-        return GetPromptResult(
-            description=f"Modify {modification} using efficient binding-based workflow",
-            messages=[
-                PromptMessage(
-                    role="user",
-                    content=TextContent(
-                        type="text",
-                        text=f"""Modify the diagram: {modification}
 
-BINDING-AWARE MODIFICATION WORKFLOW:
-
-1. **Check existing bindings FIRST**:
-   - Use list_cells() to see all nodes and their bindings
-   - Look for [BOUND to: ...] annotations
-   - This tells you which nodes already move together
-   
-2. **Identify the modification scope**:
-   - Which nodes need to move?
-   - Are they already bound together?
-   - If not, should they be bound?
-   
-3. **Create new bindings if needed**:
-   - If multiple unbound nodes need to move together, bind them first
-   - Use bind_nodes(node_ids=[...])
-   - This is a one-time setup that saves many future calls
-   
-4. **Make the modification efficiently**:
-   - Move just ONE node from each bound group
-   - Use move_shape(shape_id=one_node_id, new_x=..., new_y=...)
-   - All bound nodes move automatically
-   
-5. **Verify the change**:
-   - Use list_cells() to confirm positions
-   - Use detect_line_crossings() to check for new issues
-
-EXAMPLE - Moving a service cluster:
-```
-# Without bindings (inefficient):
-move_shape("svc1", 300, 100)  # Call 1
-move_shape("svc2", 300, 200)  # Call 2  
-move_shape("db1", 300, 300)   # Call 3
-move_shape("cache1", 450, 300) # Call 4
-# Total: 4 calls
-
-# With bindings (efficient):
-bind_nodes(["svc1", "svc2", "db1", "cache1"])  # One-time setup
-move_shape("svc1", 300, 100)  # Just ONE call - all 4 move!
-# Total: 2 calls (and future modifications only need 1 call)
-```
-
-KEY INSIGHT: Bindings are an INVESTMENT - spend 1 call to set them up, save 3-10 calls on every future adjustment!"""
-                    )
-                )
-            ]
-        )
-    
-    elif name == "create_architecture_diagram":
-        arch_desc = arguments.get("architecture_description", "a system architecture") if arguments else "a system architecture"
-        
-        return GetPromptResult(
-            description=f"Create {arch_desc} with proper component grouping",
-            messages=[
-                PromptMessage(
-                    role="user",
-                    content=TextContent(
-                        type="text",
-                        text=f"""Create an architecture diagram for: {arch_desc}
-
-ARCHITECTURE DIAGRAM WORKFLOW:
-
-1. **Plan layers/tiers**:
-   - Identify logical layers (e.g., presentation, business, data)
-   - Plan vertical spacing: 250-300px between layers
-   - Plan horizontal spacing: 200-250px between components
-   
-2. **Create components layer by layer**:
-   - Start with the top layer (e.g., UI/frontend)
-   - Use add_shape() for each component
-   - Use consistent Y coordinates within a layer
-   
-3. **Bind components within each layer**:
-   - After creating all components in a layer, bind them
-   - Example: bind_nodes(["ui1", "ui2", "ui3"])
-   - This allows moving entire layers together
-   
-4. **Create cross-layer component groups**:
-   - For vertical stacks (e.g., service + its database), bind them too
-   - Use suggest_bindings() to identify these relationships
-   - Bind vertical stacks: bind_nodes(["service", "service_db", "service_cache"])
-   
-5. **Add connections**:
-   - Connect components with add_connection()
-   - Use entry/exit points for clean routing
-   - Add waypoints if needed for complex routing
-   
-6. **Optimize layout**:
-   - Use detect_line_crossings() to find issues
-   - Move one node per bound group to fix crossings
-   - All bound components move together
-
-LAYERING STRATEGY:
-```
-Layer 1 (Y=100): UI components - bind together
-Layer 2 (Y=350): API/Service components - bind together  
-Layer 3 (Y=600): Data components - bind together
-
-Vertical stacks: Each service+db+cache stack bound together
-
-Result:
-- Move entire layers by adjusting ONE node
-- Move service stacks by adjusting ONE component
-- Total tool calls reduced by 75-85%
-```
-
-BEST PRACTICES:
-✓ Bind horizontally (all components in a layer)
-✓ Bind vertically (component + its dependencies)
-✓ Use suggest_bindings() to discover implicit relationships
-✓ Test moving one node per group to verify bindings work"""
-                    )
-                )
-            ]
-        )
-    
     else:
         return GetPromptResult(
             description=f"Unknown prompt: {name}",
@@ -365,7 +194,7 @@ BEST PRACTICES:
                     role="user",
                     content=TextContent(
                         type="text",
-                        text=f"Prompt '{name}' not found. Use list_prompts to see available prompts."
+                        text=f"Prompt '{name}' not found. Available prompts: plan_diagram, draw_diagram, review_diagram."
                     )
                 )
             ]

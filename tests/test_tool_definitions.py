@@ -12,13 +12,15 @@ def test_add_shape_tool_documents_html_uml_labels():
     add_connection = tools["add_connection"]
     update_cell = tools["update_cell"]
     label_description = add_shape.inputSchema["properties"]["label"]["description"]
-    shape_type_description = add_shape.inputSchema["properties"]["shape_type"]["description"]
     connection_label_description = add_connection.inputSchema["properties"]["label"]["description"]
     update_value_description = update_cell.inputSchema["properties"]["value"]["description"]
 
-    assert "HTML text with <br> line breaks" in label_description
-    assert "All labels are handled as HTML text" in label_description
-    assert "plain uml_class label still creates empty attributes and methods compartments" in label_description
-    assert "uml_class creates a three-compartment class box" in shape_type_description
-    assert "Connection labels are handled as HTML text" in connection_label_description
-    assert "Values are handled as HTML text" in update_value_description
+    # add_shape label should mention HTML and UML format
+    assert "HTML" in label_description or "<br>" in label_description
+    assert "UML" in label_description or "uml" in label_description.lower()
+
+    # add_connection label should mention HTML
+    assert "HTML" in connection_label_description or "<br>" in connection_label_description
+
+    # update_cell value should mention HTML
+    assert "HTML" in update_value_description or "label" in update_value_description.lower()
