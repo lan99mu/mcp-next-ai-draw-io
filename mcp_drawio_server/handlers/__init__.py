@@ -58,9 +58,6 @@ async def handle_tool_call(name: str, arguments: Any) -> list[TextContent]:
         return handle_add_shape(arguments)
     elif name == "add_connection":
         return handle_add_connection(arguments)
-    elif name == "list_shapes":
-        return handle_list_cells({})  # Deprecated, redirect to list_cells
-    
     # Binding operations
     elif name == "bind_nodes":
         return handle_bind_nodes(arguments)

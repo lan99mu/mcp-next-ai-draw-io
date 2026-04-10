@@ -3,17 +3,13 @@
 File operation handlers.
 
 Handlers for create_diagram, load_diagram, and save_diagram tools.
-
-Note: The _handle_get_diagram_xml and _handle_set_diagram_xml functions are 
-internal helpers and are NOT exposed as public tools. Direct XML manipulation
-is discouraged - use the high-level tools (add_shape, add_connection, etc.) instead.
 """
 
 from typing import Any
 from mcp.types import TextContent
 
 from .state import diagram_state
-from ..xml_operations import parse_drawio_xml, get_cells_from_xml
+from ..xml_operations import get_cells_from_xml
 from ..file_operations import load_diagram_file, save_diagram_file
 from ..diagram import Diagram
 
@@ -74,44 +70,3 @@ def handle_save_diagram(arguments: Any) -> list[TextContent]:
     except Exception as e:
         return [TextContent(type="text", text=f"Error saving diagram: {str(e)}")]
 
-
-def _handle_get_diagram_xml(arguments: Any) -> list[TextContent]:
-    """Internal helper for get_diagram_xml. Not exposed as a public tool."""
-    if diagram_state.current_xml:
-        xml_content = diagram_state.current_xml
-    elif diagram_state.current_diagram:
-        xml_content = diagram_state.current_diagram.to_drawio_xml()
-    else:
-        return [TextContent(
-            type="text",
-            text="No diagram available. Create a new diagram or load an existing one."
-        )]
-    
-    return [TextContent(
-        type="text",
-        text=f"Draw.io XML ({len(xml_content)} bytes):\n\n{xml_content}"
-    )]
-
-
-def _handle_set_diagram_xml(arguments: Any) -> list[TextContent]:
-    """Internal helper for set_diagram_xml. Not exposed as a public tool."""
-    try:
-        xml_content = arguments["xml"]
-        doc = parse_drawio_xml(xml_content)
-        
-        if not (doc.getElementsByTagName('mxGraphModel') or doc.getElementsByTagName('mxfile')):
-            return [TextContent(
-                type="text",
-                text="Error: Invalid Draw.io XML - missing mxGraphModel or mxfile element"
-            )]
-        
-        diagram_state.current_xml = xml_content
-        diagram_state.current_diagram = None
-        
-        cells = get_cells_from_xml(xml_content)
-        return [TextContent(
-            type="text",
-            text=f"Diagram XML updated successfully.\n\nDiagram now contains {len(cells)} cells."
-        )]
-    except Exception as e:
-        return [TextContent(type="text", text=f"Error: Invalid XML - {str(e)}")]
