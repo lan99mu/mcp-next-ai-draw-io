@@ -361,6 +361,23 @@ def test_html_breaks_are_supported_for_uml_labels():
     assert "+ login()&lt;br&gt;+ logout()" in xml
 
 
+def test_uml_class_width_auto_expands_for_long_members():
+    """UML class width should expand when member text is wider than requested width."""
+    diagram = Diagram("UML Width Auto Expand Test")
+    shape_id = diagram.add_shape(
+        "FrontendAuthClient\n───────\n- thisIsAnExtremelyLongPropertyNameThatShouldNotOverflowBoundary: string",
+        x=20,
+        y=20,
+        width=120,
+        shape_type="uml_class",
+    )
+
+    shape = diagram.shapes[shape_id]
+    # Width is heuristic-based (font/rendering approximation); for this long field name
+    # it should expand well beyond the original 120.
+    assert shape.width > 200
+
+
 if __name__ == "__main__":
     print("Testing UML Class Diagram Support")
     print("=" * 50)

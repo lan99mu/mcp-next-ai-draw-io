@@ -38,9 +38,18 @@ def handle_detect_line_crossings(arguments: Any) -> list[TextContent]:
     result_parts = [f"Detected {len(crossings)} line crossing(s):\n"]
     
     for i, crossing in enumerate(crossings, 1):
-        result_parts.append(f"\n{i}. Crossing between:")
-        result_parts.append(f"   - Connection '{crossing['connection1_label']}' (ID: {crossing['connection1_id']})")
-        result_parts.append(f"   - Connection '{crossing['connection2_label']}' (ID: {crossing['connection2_id']})")
+        issue_type = crossing.get("issue_type", "line_crossing")
+        if issue_type == "node_crossing":
+            result_parts.append(f"\n{i}. Connection routing crosses a node:")
+            result_parts.append(f"   - Connection '{crossing['connection1_label']}' (ID: {crossing['connection1_id']})")
+            result_parts.append(f"   - Node '{crossing['connection2_label']}' (ID: {crossing['connection2_id']})")
+        else:
+            result_parts.append(f"\n{i}. Crossing between connections:")
+            result_parts.append(f"   - Connection '{crossing['connection1_label']}' (ID: {crossing['connection1_id']})")
+            result_parts.append(f"   - Connection '{crossing['connection2_label']}' (ID: {crossing['connection2_id']})")
+            if crossing.get("intersection_point"):
+                ix, iy = crossing["intersection_point"]
+                result_parts.append(f"   - Intersection point: ({ix:.1f}, {iy:.1f})")
         result_parts.append(f"   {crossing['suggestion']}")
     
     return [TextContent(type="text", text="\n".join(result_parts))]
