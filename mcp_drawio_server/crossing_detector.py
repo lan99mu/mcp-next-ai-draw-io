@@ -235,7 +235,8 @@ def _segment_crosses_rect(
             continue
         intersections.append(inter)
 
-    # One unique point is typically a touch on edge/corner; 2+ means true pass-through.
+    # We already handled "endpoint inside rect". Here, requiring >=2 unique edge intersections
+    # filters out most corner/edge touches while still catching clear pass-through segments.
     return len(intersections) >= 2
 
 
