@@ -36,7 +36,7 @@ def handle_bind_nodes(arguments: Any) -> list[TextContent]:
     
     return [TextContent(
         type="text",
-        text=f"Successfully bound {len(node_ids)} nodes together: {', '.join(node_ids)}\n\nThese nodes will now move together when any one of them is moved."
+        text=f"Bound {len(node_ids)} nodes: {', '.join(node_ids)}" + (diagram_state.maybe_autosave() or "")
     )]
 
 
@@ -66,7 +66,7 @@ def handle_unbind_nodes(arguments: Any) -> list[TextContent]:
     
     return [TextContent(
         type="text",
-        text=f"Successfully unbound {len(node_ids)} nodes: {', '.join(node_ids)}"
+        text=f"Unbound {len(node_ids)} nodes: {', '.join(node_ids)}" + (diagram_state.maybe_autosave() or "")
     )]
 
 
@@ -129,14 +129,14 @@ def handle_move_shape(arguments: Any) -> list[TextContent]:
     if diagram_state.current_xml:
         diagram_state.current_xml = diagram.to_drawio_xml()
     
+    autosave_note = diagram_state.maybe_autosave() or ""
     if len(moved_nodes) > 1:
         return [TextContent(
             type="text",
-            text=f"Moved shape '{shape_id}' from ({old_x}, {old_y}) to ({new_x}, {new_y}).\n\nAlso moved {len(moved_nodes) - 1} bound node(s) by offset ({offset_x}, {offset_y}):\n" + 
-                 "\n".join(f"- {nid}" for nid in moved_nodes[1:])
+            text=f"Moved '{shape_id}' to ({new_x}, {new_y}); also moved {len(moved_nodes) - 1} bound node(s): {', '.join(moved_nodes[1:])}{autosave_note}"
         )]
     else:
         return [TextContent(
             type="text",
-            text=f"Moved shape '{shape_id}' from ({old_x}, {old_y}) to ({new_x}, {new_y})."
+            text=f"Moved '{shape_id}' to ({new_x}, {new_y}){autosave_note}"
         )]

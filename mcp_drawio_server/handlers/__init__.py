@@ -33,11 +33,12 @@ from .analysis_handlers import (
     handle_suggest_bindings,
     handle_detect_overlaps,
 )
+from .batch_handlers import handle_batch_operations
 
 
 async def handle_tool_call(name: str, arguments: Any) -> list[TextContent]:
     """Handle tool calls and dispatch to appropriate handlers."""
-    
+
     # File operations
     if name == "create_diagram":
         return handle_create_diagram(arguments)
@@ -45,7 +46,7 @@ async def handle_tool_call(name: str, arguments: Any) -> list[TextContent]:
         return handle_load_diagram(arguments)
     elif name == "save_diagram":
         return handle_save_diagram(arguments)
-    
+
     # Cell operations
     elif name == "list_cells":
         return handle_list_cells(arguments)
@@ -59,6 +60,7 @@ async def handle_tool_call(name: str, arguments: Any) -> list[TextContent]:
         return handle_add_shape(arguments)
     elif name == "add_connection":
         return handle_add_connection(arguments)
+
     # Binding operations
     elif name == "bind_nodes":
         return handle_bind_nodes(arguments)
@@ -68,7 +70,7 @@ async def handle_tool_call(name: str, arguments: Any) -> list[TextContent]:
         return handle_get_bound_nodes(arguments)
     elif name == "move_shape":
         return handle_move_shape(arguments)
-    
+
     # Analysis operations
     elif name == "detect_line_crossings":
         return handle_detect_line_crossings(arguments)
@@ -76,6 +78,10 @@ async def handle_tool_call(name: str, arguments: Any) -> list[TextContent]:
         return handle_suggest_bindings(arguments)
     elif name == "detect_overlaps":
         return handle_detect_overlaps(arguments)
-    
+
+    # Batch operations
+    elif name == "batch_operations":
+        return handle_batch_operations(arguments)
+
     else:
         return [TextContent(type="text", text=f"Unknown tool: {name}")]

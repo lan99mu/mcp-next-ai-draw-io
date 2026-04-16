@@ -22,6 +22,10 @@ def get_tool_definitions() -> list[Tool]:
                         "type": "string",
                         "description": "Diagram name",
                         "default": "Untitled"
+                    },
+                    "autosave_path": {
+                        "type": "string",
+                        "description": "If set, write the file to this path after every mutating operation (autosave mode)"
                     }
                 }
             }
@@ -35,6 +39,11 @@ def get_tool_definitions() -> list[Tool]:
                     "path": {
                         "type": "string",
                         "description": "Absolute or relative path to the .drawio file"
+                    },
+                    "autosave": {
+                        "type": "boolean",
+                        "description": "If true, write changes back to this file after every mutating operation",
+                        "default": False
                     }
                 },
                 "required": ["path"]
@@ -490,6 +499,44 @@ def get_tool_definitions() -> list[Tool]:
                         "maximum": 1000
                     }
                 }
+            }
+        ),
+
+        # --- Batch Operations ---
+        Tool(
+            name="batch_operations",
+            description="Execute multiple diagram operations in one call to reduce token usage.",
+            inputSchema={
+                "type": "object",
+                "properties": {
+                    "operations": {
+                        "type": "array",
+                        "description": (
+                            "Ordered list of operations. Each item is an object with an 'op' key "
+                            "plus the parameters of that operation. "
+                            "Supported ops: add_shape, add_connection, bind_nodes, unbind_nodes, "
+                            "move_shape, update_cell, delete_cell."
+                        ),
+                        "items": {
+                            "type": "object",
+                            "properties": {
+                                "op": {
+                                    "type": "string",
+                                    "enum": [
+                                        "add_shape", "add_connection",
+                                        "bind_nodes", "unbind_nodes",
+                                        "move_shape", "update_cell", "delete_cell"
+                                    ],
+                                    "description": "Operation name"
+                                }
+                            },
+                            "required": ["op"],
+                            "additionalProperties": True
+                        },
+                        "minItems": 1
+                    }
+                },
+                "required": ["operations"]
             }
         ),
     ]

@@ -32,6 +32,17 @@ from .prompts import get_prompt_definitions, get_prompt_result
 from .resources import get_resource_definitions, get_resource_content
 
 
+# Server-level instructions injected once into the LLM system prompt.
+# Keep this concise — it guides optimal tool usage without bloating every request.
+SERVER_INSTRUCTIONS = (
+    "Draw.io diagram server. Workflow: "
+    "1) Use batch_operations to add all shapes+connections in one call instead of individual add_shape/add_connection calls — this is the preferred approach and saves significant tokens. "
+    "2) Use create_diagram(autosave_path=...) or load_diagram(autosave=true) to enable autosave so changes appear on disk immediately without a separate save_diagram call. "
+    "3) Call list_cells/get_cell only when you need to retrieve IDs or inspect existing elements. "
+    "4) Call save_diagram explicitly only when autosave is off. "
+    "5) For detailed docs on shapes, bindings, or workflows, read the docs:// resources instead of asking questions."
+)
+
 # Initialize MCP server
 app = Server("mcp-drawio-server")
 
@@ -75,10 +86,14 @@ async def read_resource(uri: str) -> ReadResourceResult:
 async def main():
     """Main entry point for the server."""
     async with stdio_server() as (read_stream, write_stream):
+        init_options = app.create_initialization_options()
+        # Inject server instructions so the LLM receives workflow guidance once
+        # at session start rather than on every tool description.
+        init_options.instructions = SERVER_INSTRUCTIONS
         await app.run(
             read_stream,
             write_stream,
-            app.create_initialization_options()
+            init_options
         )
 
 
