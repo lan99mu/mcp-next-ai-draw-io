@@ -46,8 +46,8 @@ def _absolute_bounds(
     """
     x = _safe_float(cell.get("x"))
     y = _safe_float(cell.get("y"))
-    w = _safe_float(cell.get("width"))
-    h = _safe_float(cell.get("height"))
+    width = _safe_float(cell.get("width"))
+    height = _safe_float(cell.get("height"))
 
     parent_id = cell.get("parent")
     if parent_id and parent_id not in _DEFAULT_ROOT_IDS:
@@ -62,7 +62,7 @@ def _absolute_bounds(
                 x += px
                 y += py
 
-    return x, y, w, h
+    return x, y, width, height
 
 
 def _boxes_overlap(
