@@ -354,7 +354,7 @@ def handle_update_cell(arguments: Any) -> list[TextContent]:
             
             return [TextContent(
                 type="text",
-                text=f"Cell {cell_id} updated successfully.\n\nUpdated fields: {', '.join(updates.keys())}"
+                text=f"Cell {cell_id} updated: {', '.join(updates.keys())}" + (diagram_state.maybe_autosave() or "")
             )]
         except Exception as e:
             return [TextContent(type="text", text=f"Error updating cell: {str(e)}")]
@@ -374,7 +374,7 @@ def handle_delete_cell(arguments: Any) -> list[TextContent]:
             diagram_state.current_xml = delete_cell_in_xml(
                 diagram_state.current_xml, cell_id
             )
-            return [TextContent(type="text", text=f"Cell {cell_id} deleted successfully.")]
+            return [TextContent(type="text", text=f"Cell {cell_id} deleted." + (diagram_state.maybe_autosave() or ""))]
         except Exception as e:
             return [TextContent(type="text", text=f"Error deleting cell: {str(e)}")]
     else:
@@ -412,7 +412,7 @@ def handle_add_shape(arguments: Any) -> list[TextContent]:
     
     return [TextContent(
         type="text",
-        text=f"Added shape '{arguments['label']}' with ID: {shape_id}"
+        text=f"Added shape '{arguments['label']}' with ID: {shape_id}" + (diagram_state.maybe_autosave() or "")
     )]
 
 
@@ -462,7 +462,7 @@ def handle_add_connection(arguments: Any) -> list[TextContent]:
         
         return [TextContent(
             type="text",
-            text=f"Added connection from {arguments['source_id']} to {arguments['target_id']} with ID: {conn_id}"
+            text=f"Added connection from {arguments['source_id']} to {arguments['target_id']} with ID: {conn_id}" + (diagram_state.maybe_autosave() or "")
         )]
     except ValueError as e:
         return [TextContent(type="text", text=f"Error: {str(e)}")]
