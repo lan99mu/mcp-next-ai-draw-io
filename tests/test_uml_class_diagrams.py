@@ -373,7 +373,8 @@ def test_uml_class_width_auto_expands_for_long_members():
     )
 
     shape = diagram.shapes[shape_id]
-    assert shape.width > 120
+    # Width is heuristic-based (font/rendering approximation), so we assert meaningful expansion.
+    assert shape.width > 200
 
 
 if __name__ == "__main__":

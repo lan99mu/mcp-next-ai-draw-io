@@ -324,7 +324,7 @@ class Diagram:
 
     @staticmethod
     def _text_visual_width(text: str) -> float:
-        """Estimate visual width by accounting for wide CJK/full-width characters."""
+        """Estimate visual width units, using 2.0 for wide/full-width chars and 1.0 otherwise."""
         width = 0.0
         for char in text:
             width += 2.0 if unicodedata.east_asian_width(char) in {"W", "F"} else 1.0

@@ -5,6 +5,7 @@ This module provides functions to detect when connections (lines) cross each oth
 and provide position hints to help AI models adjust them.
 """
 
+import re
 from typing import Optional
 
 
@@ -97,7 +98,6 @@ def _label(cell: dict) -> str:
     """Return a readable label for a cell."""
     raw = (cell.get("value") or "").strip()
     if raw:
-        import re
         return re.sub(r"<[^>]+>", "", raw).strip() or cell.get("id", "(unknown)")
     return cell.get("id", "(unknown)")
 
