@@ -11,6 +11,7 @@ from mcp.types import TextContent
 from .state import diagram_state, safe_float
 from ..xml_operations import get_cells_from_xml
 from ..crossing_detector import detect_crossings
+from ..overlap_detector import detect_overlaps
 
 
 def handle_detect_line_crossings(arguments: Any) -> list[TextContent]:
@@ -197,4 +198,55 @@ def handle_suggest_bindings(arguments: Any) -> list[TextContent]:
             "all bound nodes move automatically!"
         )
     
+    return [TextContent(type="text", text="\n".join(result_parts))]
+
+
+def handle_detect_overlaps(arguments: Any) -> list[TextContent]:
+    """Handle detect_overlaps tool call."""
+    if diagram_state.current_xml:
+        cells = get_cells_from_xml(diagram_state.current_xml)
+    elif diagram_state.current_diagram:
+        xml_content = diagram_state.current_diagram.to_drawio_xml()
+        cells = get_cells_from_xml(xml_content)
+    else:
+        return [TextContent(
+            type="text",
+            text="No diagram available. Create a new diagram or load an existing one."
+        )]
+
+    results = detect_overlaps(cells)
+    node_overlaps = results["node_overlaps"]
+    out_of_container = results["out_of_container"]
+
+    total = len(node_overlaps) + len(out_of_container)
+
+    if total == 0:
+        return [TextContent(
+            type="text",
+            text="✓ No overlaps or boundary violations detected. All shapes are correctly positioned!"
+        )]
+
+    result_parts = [f"Detected {total} overlap/boundary issue(s):\n"]
+
+    if node_overlaps:
+        result_parts.append(f"── Node–Node Overlaps ({len(node_overlaps)}) ──")
+        for i, item in enumerate(node_overlaps, 1):
+            result_parts.append(f"\n{i}. {item['suggestion']}")
+            result_parts.append(
+                f"   → Fix: move_shape(shape_id='{item['shape2_id']}', new_x=..., new_y=...)"
+            )
+
+    if out_of_container:
+        result_parts.append(f"\n── Out-of-Container Violations ({len(out_of_container)}) ──")
+        for i, item in enumerate(out_of_container, 1):
+            result_parts.append(f"\n{i}. {item['suggestion']}")
+            result_parts.append(
+                f"   → Fix: move_shape or update_cell to reposition '{item['shape_id']}' "
+                f"inside '{item['container_id']}'"
+            )
+
+    result_parts.append(
+        "\n✨ TIP: Fix overlaps before adding connections to avoid crossing lines."
+    )
+
     return [TextContent(type="text", text="\n".join(result_parts))]

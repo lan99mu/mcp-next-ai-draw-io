@@ -68,7 +68,13 @@ def get_prompt_result(name: str, arguments: dict[str, str] | None) -> GetPromptR
             type_hints = {
                 "flowchart": "Use shape_type: rectangle for steps, diamond for decisions, ellipse for start/end.",
                 "architecture": "Use rectangle/cylinder/cloud. Group by layer (UI → API → Data). Space layers 250px apart vertically.",
-                "uml_class": "Use shape_type: uml_class. Label format: 'ClassName<br>───────<br>- attr: type<br>───────<br>+ method()'.",
+                "uml_class": (
+                    "Use shape_type: uml_class. Label format: "
+                    "'ClassName<br>───────<br>- attr: type<br>───────<br>+ method()'. "
+                    "For complex class diagrams, define domain containers first (shape_type=container), "
+                    "place each class fully inside its domain via parent_id, keep domains non-overlapping, "
+                    "and ensure classes in each domain use consistent grid spacing to avoid overlap."
+                ),
                 "activity": "Use activity_start/end/action/decision/fork/join shapes.",
                 "swimlane": "Use swimlane_pool + swimlane_h/swimlane_v. Place child shapes inside with parent_id.",
             }
@@ -91,6 +97,7 @@ TASK: Produce a structured plan — do NOT call any tools yet.
 4. Note the recommended spacing:
    - Vertical: 150–200px between rows
    - Horizontal: 200–250px between columns
+   - Domain containers: keep 150–200px gap between domain boundaries
 
 {f"TYPE HINT: {type_hint}" if type_hint else ""}
 
@@ -149,6 +156,9 @@ RULES:
 - Create ALL shapes before adding connections
 - Bind groups IMMEDIATELY after creating their shapes
 - Use entry_x/entry_y/exit_x/exit_y for precise connection points when layout matters
+- For complex UML class diagrams:
+  - Create domain containers first, then classes inside with parent_id
+  - Prefer orthogonal edges and add waypoints when avoiding crossings
 
 After drawing, use the `review_diagram` prompt to optimize."""
                     )
@@ -167,20 +177,28 @@ After drawing, use the `review_diagram` prompt to optimize."""
                         text="""Review the current diagram and optimize its layout:
 
 STEPS:
-1. **Inspect**: `list_cells()` — check positions, overlaps, and binding info
-2. **Detect crossings**: `detect_line_crossings()` — find overlapping connections
-3. **Suggest bindings**: `suggest_bindings()` — discover ungrouped related nodes
-4. **Fix issues**:
-   - Bind suggested groups: `bind_nodes(node_ids=[...])`
-   - Move nodes to fix crossings: `move_shape(...)` (bound nodes follow)
-   - Adjust waypoints or entry/exit points if connections overlap
-5. **Verify**: Run `detect_line_crossings()` again to confirm fixes
-6. **Save**: `save_diagram(path=...)` when satisfied
+1. **Inspect**: `list_cells()` — check positions, bounds, and binding info
+2. **Detect overlaps**: `detect_overlaps()` — find node–node overlaps and out-of-container violations
+3. **Detect crossings**: `detect_line_crossings()` — find overlapping connections
+4. **Suggest bindings**: `suggest_bindings()` — discover ungrouped related nodes
+5. **Fix issues**:
+    - Bind suggested groups: `bind_nodes(node_ids=[...])`
+    - Move nodes to fix overlaps/crossings: `move_shape(...)` (bound nodes follow)
+    - Adjust waypoints or entry/exit points if connections overlap
+5. **Complex UML class diagram checklist**:
+   - Nodes must be fully inside their domain containers
+   - Domain containers must not overlap each other
+   - Class nodes within each domain must not overlap each other
+   - Nodes from different domains (or standalone nodes) must not overlap each other
+   - Orthogonal polylines should avoid crossings where possible
+6. **Verify**: Run `detect_overlaps()` and `detect_line_crossings()` again to confirm fixes
+7. **Save**: `save_diagram(path=...)` when satisfied
 
 COMMON FIXES:
-- Overlapping shapes → increase spacing (move_shape)
+- Overlapping shapes → `detect_overlaps()` → follow suggestions (move_shape or resize)
 - Crossed connections → add waypoints or adjust entry/exit points
-- Unbound related nodes → bind_nodes to group them"""
+- Unbound related nodes → bind_nodes to group them
+- Nodes outside containers → move node or move container and re-check"""
                     )
                 )
             ]

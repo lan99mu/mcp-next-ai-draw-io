@@ -469,6 +469,14 @@ def get_tool_definitions() -> list[Tool]:
             }
         ),
         Tool(
+            name="detect_overlaps",
+            description="Detect overlapping shapes and out-of-container boundary violations, with fix suggestions.",
+            inputSchema={
+                "type": "object",
+                "properties": {}
+            }
+        ),
+        Tool(
             name="suggest_bindings",
             description="Analyze diagram and suggest which nodes should be bound, based on proximity, naming, and connections.",
             inputSchema={

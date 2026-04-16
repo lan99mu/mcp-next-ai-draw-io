@@ -31,6 +31,7 @@ from .binding_handlers import (
 from .analysis_handlers import (
     handle_detect_line_crossings,
     handle_suggest_bindings,
+    handle_detect_overlaps,
 )
 
 
@@ -73,6 +74,8 @@ async def handle_tool_call(name: str, arguments: Any) -> list[TextContent]:
         return handle_detect_line_crossings(arguments)
     elif name == "suggest_bindings":
         return handle_suggest_bindings(arguments)
+    elif name == "detect_overlaps":
+        return handle_detect_overlaps(arguments)
     
     else:
         return [TextContent(type="text", text=f"Unknown tool: {name}")]

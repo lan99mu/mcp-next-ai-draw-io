@@ -216,9 +216,14 @@ def handle_list_cells(arguments: Any) -> list[TextContent]:
             y = safe_float(cell.get('y'))
             width = safe_float(cell.get('width'))
             height = safe_float(cell.get('height'))
-            center_x = x + width / 2
-            center_y = y + height / 2
-            pos = f"at ({x}, {y}), size ({width}x{height}), center ({center_x}, {center_y})"
+            abs_x, abs_y, _, _ = _get_absolute_bounds(cell, cells_by_id)
+            center_x = abs_x + width / 2
+            center_y = abs_y + height / 2
+            pos = (
+                f"at ({x}, {y}), size ({width}x{height}), "
+                f"bounds ({abs_x:.0f},{abs_y:.0f})→({abs_x+width:.0f},{abs_y+height:.0f}), "
+                f"center ({center_x:.0f},{center_y:.0f})"
+            )
             
             bind_relationships = _get_bind_relationships(cell, cells, cells_by_id)
             bind_parts = []
