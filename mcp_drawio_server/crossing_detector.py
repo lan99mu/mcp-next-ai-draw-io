@@ -75,7 +75,7 @@ def get_connection_endpoints(
     return ((start_x, start_y), (end_x, end_y))
 
 
-def _safe_float(value, default: float = 0.0) -> float:
+def _to_float_or_default(value, default: float = 0.0) -> float:
     """Convert value to float, with a default fallback."""
     if value is None or value == "":
         return default
@@ -112,7 +112,7 @@ def _connection_points(
 
     for waypoint in connection.get("waypoints", []):
         if isinstance(waypoint, (list, tuple)) and len(waypoint) >= 2:
-            points.append((_safe_float(waypoint[0]), _safe_float(waypoint[1])))
+            points.append((_to_float_or_default(waypoint[0]), _to_float_or_default(waypoint[1])))
 
     points.append(end)
     return points
@@ -312,13 +312,13 @@ def detect_crossings(cells: list[dict]) -> list[dict]:
             if _is_uml_section(shape.get("style", "")):
                 continue
 
-            w = _safe_float(shape.get('width'))
-            h = _safe_float(shape.get('height'))
+            w = _to_float_or_default(shape.get('width'))
+            h = _to_float_or_default(shape.get('height'))
             if w <= 0 or h <= 0:
                 continue
             rect = (
-                _safe_float(shape.get('x')),
-                _safe_float(shape.get('y')),
+                _to_float_or_default(shape.get('x')),
+                _to_float_or_default(shape.get('y')),
                 w,
                 h,
             )
