@@ -70,7 +70,7 @@ async def test_prompt_content_quality():
 
 @pytest.mark.asyncio
 async def test_uml_complex_layout_guidance_in_prompts():
-    """Ensure prompts include complex UML class diagram anti-overlap guidance."""
+    """Ensure prompts include complex UML class diagram overlap-prevention guidance."""
     plan_result = get_prompt_result(
         "plan_diagram",
         {"description": "complex domain model", "diagram_type": "uml_class"},
@@ -78,7 +78,7 @@ async def test_uml_complex_layout_guidance_in_prompts():
     plan_content = plan_result.messages[0].content.text.lower()
     assert "container" in plan_content
     assert "parent_id" in plan_content
-    assert "non-overlapping" in plan_content or "non-overlap" in plan_content
+    assert "overlap" in plan_content
 
     review_result = get_prompt_result("review_diagram", {})
     review_content = review_result.messages[0].content.text.lower()

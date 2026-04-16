@@ -97,7 +97,7 @@ TASK: Produce a structured plan — do NOT call any tools yet.
 4. Note the recommended spacing:
    - Vertical: 150–200px between rows
    - Horizontal: 200–250px between columns
-   - Domain containers: keep at least 120px gap between domains
+   - Domain containers: keep 150–200px gap between domain boundaries
 
 {f"TYPE HINT: {type_hint}" if type_hint else ""}
 
@@ -158,8 +158,6 @@ RULES:
 - Use entry_x/entry_y/exit_x/exit_y for precise connection points when layout matters
 - For complex UML class diagrams:
   - Create domain containers first, then classes inside with parent_id
-  - Keep every class fully inside its domain container
-  - Keep domain containers and classes non-overlapping
   - Prefer orthogonal edges and add waypoints when avoiding crossings
 
 After drawing, use the `review_diagram` prompt to optimize."""
@@ -190,7 +188,7 @@ STEPS:
    - Nodes must be fully inside their domain containers
    - Domain containers must not overlap each other
    - Class nodes within each domain must not overlap each other
-   - Nodes should not overlap across the whole canvas
+   - Nodes from different domains (or standalone nodes) must not overlap each other
    - Orthogonal polylines should avoid crossings where possible
 6. **Verify**: Run `detect_line_crossings()` again to confirm fixes
 7. **Save**: `save_diagram(path=...)` when satisfied
