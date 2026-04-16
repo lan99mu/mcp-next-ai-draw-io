@@ -7,6 +7,7 @@ and generates Draw.io XML format.
 
 import html
 import re
+import unicodedata
 from typing import Optional
 from datetime import datetime, timezone
 from .models import Shape, Connection, UMLSection
@@ -130,6 +131,12 @@ class Diagram:
             self.next_id += len(uml_sections)
             if height == 60:
                 height = calculated_height
+
+        if shape_type in uml_class_types:
+            width = max(
+                width,
+                self._calculate_uml_class_width(class_name, uml_sections, font_size or 12)
+            )
         
         # Auto-calculate size if requested (for non-UML or simple UML shapes)
         if auto_size and label and not uml_sections:
@@ -314,6 +321,40 @@ class Diagram:
         height = max(num_lines * line_height + padding_v * 2, 40)
         
         return (round(width), round(height))
+
+    @staticmethod
+    def _text_visual_width(text: str) -> float:
+        """Estimate visual width by accounting for wide CJK/full-width characters."""
+        width = 0.0
+        for char in text:
+            width += 2.0 if unicodedata.east_asian_width(char) in {"W", "F"} else 1.0
+        return width
+
+    @classmethod
+    def _calculate_uml_class_width(
+        cls,
+        class_name: str,
+        sections: list[UMLSection],
+        font_size: int = 12
+    ) -> float:
+        """Calculate minimum UML class width to keep section text inside class bounds."""
+        lines = []
+
+        header = cls._html_to_plain_text(class_name)
+        if header:
+            lines.extend(header.split('\n'))
+
+        for section in sections:
+            if section.section_type != "text":
+                continue
+            content = cls._html_to_plain_text(section.content)
+            if content:
+                lines.extend(content.split('\n'))
+
+        max_visual_width = max((cls._text_visual_width(line) for line in lines), default=0.0)
+        char_width = font_size * CHAR_WIDTH_RATIO
+        horizontal_padding = 18  # UML left/right spacing and divider margin
+        return max(round(max_visual_width * char_width + horizontal_padding * 2), 120)
     
     def add_connection(
         self,
@@ -815,6 +856,15 @@ class Diagram:
         # Create the main class shape (header only shows name)
         shape_id = f"shape_{self.next_id}"
         self.next_id += 1
+
+        width = max(
+            width,
+            self._calculate_uml_class_width(
+                name,
+                uml_sections,
+                12
+            )
+        )
         
         self.shapes[shape_id] = Shape(
             id=shape_id,

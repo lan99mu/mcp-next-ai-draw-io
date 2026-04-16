@@ -154,6 +154,42 @@ def test_multiple_crossings():
         return False
 
 
+def test_shared_endpoints_are_not_crossings():
+    """Intersections at shared source/target endpoints should not be treated as crossings."""
+    diagram = Diagram(name="Shared Endpoint Test")
+
+    center = diagram.add_shape('Center', x=150, y=80, width=80, height=60)
+    left = diagram.add_shape('Left', x=0, y=80, width=80, height=60)
+    top = diagram.add_shape('Top', x=150, y=0, width=80, height=60)
+
+    diagram.add_connection(left, center, label="left-to-center")
+    diagram.add_connection(top, center, label="top-to-center")
+
+    cells = get_cells_from_xml(diagram.to_drawio_xml())
+    crossings = detect_crossings(cells)
+    line_crossings = [c for c in crossings if c.get("issue_type") != "node_crossing"]
+
+    assert line_crossings == [], "Shared endpoint intersections should not be reported as crossings"
+
+
+def test_connection_crossing_node_is_reported():
+    """A connection passing through an unrelated node should be reported."""
+    diagram = Diagram(name="Node Crossing Test")
+
+    source = diagram.add_shape('A', x=0, y=0, width=80, height=60)
+    target = diagram.add_shape('B', x=320, y=0, width=80, height=60)
+    obstacle = diagram.add_shape('Obstacle', x=160, y=-20, width=80, height=100)
+
+    diagram.add_connection(source, target, label="A-to-B", edge_style="straight")
+
+    cells = get_cells_from_xml(diagram.to_drawio_xml())
+    crossings = detect_crossings(cells)
+    node_crossings = [c for c in crossings if c.get("issue_type") == "node_crossing"]
+
+    assert len(node_crossings) == 1
+    assert node_crossings[0]["connection2_label"] == "Obstacle"
+
+
 if __name__ == "__main__":
     results = []
     

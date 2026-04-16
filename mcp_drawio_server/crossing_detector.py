@@ -74,6 +74,64 @@ def get_connection_endpoints(
     return ((start_x, start_y), (end_x, end_y))
 
 
+def _safe_float(value, default: float = 0.0) -> float:
+    """Convert value to float, with a default fallback."""
+    if value is None or value == "":
+        return default
+    try:
+        return float(value)
+    except (TypeError, ValueError):
+        return default
+
+
+def _is_uml_section(style: str) -> bool:
+    """Heuristic for UML class subsection cells."""
+    style_l = (style or "").lower()
+    return (
+        "portconstraint=eastwest" in style_l
+        or ("line;" in style_l and "strokewidth" in style_l)
+    )
+
+
+def _label(cell: dict) -> str:
+    """Return a readable label for a cell."""
+    raw = (cell.get("value") or "").strip()
+    if raw:
+        import re
+        return re.sub(r"<[^>]+>", "", raw).strip() or cell.get("id", "(unknown)")
+    return cell.get("id", "(unknown)")
+
+
+def _connection_points(
+    connection: dict,
+    shapes: dict,
+) -> list[tuple[float, float]]:
+    """Get ordered path points for a connection (start -> waypoints -> end)."""
+    start, end = get_connection_endpoints(connection, shapes)
+    points = [start]
+
+    for waypoint in connection.get("waypoints", []):
+        if isinstance(waypoint, (list, tuple)) and len(waypoint) >= 2:
+            points.append((_safe_float(waypoint[0]), _safe_float(waypoint[1])))
+
+    points.append(end)
+    return points
+
+
+def _segments_from_points(points: list[tuple[float, float]]) -> list[tuple[tuple[float, float], tuple[float, float]]]:
+    """Convert path points to line segments."""
+    segments = []
+    for i in range(len(points) - 1):
+        if points[i] != points[i + 1]:
+            segments.append((points[i], points[i + 1]))
+    return segments
+
+
+def _points_equal(p1: tuple[float, float], p2: tuple[float, float], eps: float = 1e-6) -> bool:
+    """Compare 2 points with tolerance."""
+    return abs(p1[0] - p2[0]) <= eps and abs(p1[1] - p2[1]) <= eps
+
+
 def line_segments_intersect(
     p1: tuple[float, float],
     p2: tuple[float, float],
@@ -120,6 +178,67 @@ def line_segments_intersect(
     return None
 
 
+def _is_shared_endpoint_intersection(
+    intersection: tuple[float, float],
+    seg1: tuple[tuple[float, float], tuple[float, float]],
+    seg2: tuple[tuple[float, float], tuple[float, float]],
+) -> bool:
+    """Return True if intersection is only at an endpoint shared by both segments."""
+    p1, p2 = seg1
+    p3, p4 = seg2
+    return (
+        (_points_equal(intersection, p1) or _points_equal(intersection, p2))
+        and (_points_equal(intersection, p3) or _points_equal(intersection, p4))
+    )
+
+
+def _point_strictly_inside_rect(
+    p: tuple[float, float],
+    rect: tuple[float, float, float, float],
+    eps: float = 1e-6
+) -> bool:
+    """Return True if point is strictly inside rectangle (not on border)."""
+    x, y = p
+    rx, ry, rw, rh = rect
+    return (rx + eps) < x < (rx + rw - eps) and (ry + eps) < y < (ry + rh - eps)
+
+
+def _segment_crosses_rect(
+    p1: tuple[float, float],
+    p2: tuple[float, float],
+    rect: tuple[float, float, float, float]
+) -> bool:
+    """Return True if segment passes through rectangle interior."""
+    if _point_strictly_inside_rect(p1, rect) or _point_strictly_inside_rect(p2, rect):
+        return True
+
+    rx, ry, rw, rh = rect
+    corners = [
+        (rx, ry),
+        (rx + rw, ry),
+        (rx + rw, ry + rh),
+        (rx, ry + rh),
+    ]
+    rect_edges = [
+        (corners[0], corners[1]),
+        (corners[1], corners[2]),
+        (corners[2], corners[3]),
+        (corners[3], corners[0]),
+    ]
+
+    intersections: list[tuple[float, float]] = []
+    for edge in rect_edges:
+        inter = line_segments_intersect(p1, p2, edge[0], edge[1])
+        if inter is None:
+            continue
+        if any(_points_equal(inter, existing) for existing in intersections):
+            continue
+        intersections.append(inter)
+
+    # One unique point is typically a touch on edge/corner; 2+ means true pass-through.
+    return len(intersections) >= 2
+
+
 def detect_crossings(cells: list[dict]) -> list[dict]:
     """
     Detect all line crossings in a diagram.
@@ -145,30 +264,80 @@ def detect_crossings(cells: list[dict]) -> list[dict]:
     # Check each pair of connections
     for i, conn1 in enumerate(connections):
         for conn2 in connections[i + 1:]:
-            # Get endpoints for both connections
-            start1, end1 = get_connection_endpoints(conn1, shapes)
-            start2, end2 = get_connection_endpoints(conn2, shapes)
-            
-            # For now, we'll check simple line segment intersection
-            # TODO: Handle waypoints by checking each segment between consecutive waypoints.
-            # This would involve: 1) Getting waypoint list from connection, 2) Creating
-            # segments between start->wp1, wp1->wp2, ..., wpN->end, 3) Checking each
-            # segment pair for intersections.
-            intersection = line_segments_intersect(start1, end1, start2, end2)
-            
-            if intersection:
-                # Generate suggestion
+            points1 = _connection_points(conn1, shapes)
+            points2 = _connection_points(conn2, shapes)
+            segments1 = _segments_from_points(points1)
+            segments2 = _segments_from_points(points2)
+
+            found_intersection = None
+            for seg1 in segments1:
+                for seg2 in segments2:
+                    intersection = line_segments_intersect(seg1[0], seg1[1], seg2[0], seg2[1])
+                    if not intersection:
+                        continue
+                    if _is_shared_endpoint_intersection(intersection, seg1, seg2):
+                        continue
+                    found_intersection = intersection
+                    break
+                if found_intersection:
+                    break
+
+            if found_intersection:
                 suggestion = _generate_crossing_suggestion(
-                    conn1, conn2, intersection, shapes
+                    conn1, conn2, found_intersection, shapes
                 )
-                
+
                 crossings.append({
+                    'issue_type': 'line_crossing',
                     'connection1_id': conn1['id'],
                     'connection1_label': conn1.get('value', '(no label)'),
                     'connection2_id': conn2['id'],
                     'connection2_label': conn2.get('value', '(no label)'),
-                    'intersection_point': intersection,
+                    'intersection_point': found_intersection,
                     'suggestion': suggestion
+                })
+
+    # Detect connection segments crossing through unrelated node interiors
+    for conn in connections:
+        source_id = conn.get('source')
+        target_id = conn.get('target')
+        points = _connection_points(conn, shapes)
+        segments = _segments_from_points(points)
+        if not segments:
+            continue
+
+        for shape_id, shape in shapes.items():
+            if shape_id in {source_id, target_id}:
+                continue
+            if _is_uml_section(shape.get("style", "")):
+                continue
+
+            w = _safe_float(shape.get('width'))
+            h = _safe_float(shape.get('height'))
+            if w <= 0 or h <= 0:
+                continue
+            rect = (
+                _safe_float(shape.get('x')),
+                _safe_float(shape.get('y')),
+                w,
+                h,
+            )
+
+            if any(_segment_crosses_rect(s1, s2, rect) for s1, s2 in segments):
+                shape_label = _label(shape)
+                conn_label = conn.get('value', '(no label)')
+                suggestion = (
+                    f"Connection '{conn_label}' passes through node '{shape_label}'. "
+                    "Add waypoints or adjust entry/exit points so the line routes around the node."
+                )
+                crossings.append({
+                    'issue_type': 'node_crossing',
+                    'connection1_id': conn['id'],
+                    'connection1_label': conn_label,
+                    'connection2_id': shape_id,
+                    'connection2_label': shape_label,
+                    'intersection_point': None,
+                    'suggestion': suggestion,
                 })
     
     return crossings
