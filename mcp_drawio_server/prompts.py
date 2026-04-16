@@ -177,12 +177,13 @@ After drawing, use the `review_diagram` prompt to optimize."""
                         text="""Review the current diagram and optimize its layout:
 
 STEPS:
-1. **Inspect**: `list_cells()` — check positions, overlaps, and binding info
-2. **Detect crossings**: `detect_line_crossings()` — find overlapping connections
-3. **Suggest bindings**: `suggest_bindings()` — discover ungrouped related nodes
-4. **Fix issues**:
+1. **Inspect**: `list_cells()` — check positions, bounds, and binding info
+2. **Detect overlaps**: `detect_overlaps()` — find node–node overlaps and out-of-container violations
+3. **Detect crossings**: `detect_line_crossings()` — find overlapping connections
+4. **Suggest bindings**: `suggest_bindings()` — discover ungrouped related nodes
+5. **Fix issues**:
     - Bind suggested groups: `bind_nodes(node_ids=[...])`
-    - Move nodes to fix crossings: `move_shape(...)` (bound nodes follow)
+    - Move nodes to fix overlaps/crossings: `move_shape(...)` (bound nodes follow)
     - Adjust waypoints or entry/exit points if connections overlap
 5. **Complex UML class diagram checklist**:
    - Nodes must be fully inside their domain containers
@@ -190,11 +191,11 @@ STEPS:
    - Class nodes within each domain must not overlap each other
    - Nodes from different domains (or standalone nodes) must not overlap each other
    - Orthogonal polylines should avoid crossings where possible
-6. **Verify**: Run `detect_line_crossings()` again to confirm fixes
+6. **Verify**: Run `detect_overlaps()` and `detect_line_crossings()` again to confirm fixes
 7. **Save**: `save_diagram(path=...)` when satisfied
 
 COMMON FIXES:
-- Overlapping shapes → increase spacing (move_shape)
+- Overlapping shapes → `detect_overlaps()` → follow suggestions (move_shape or resize)
 - Crossed connections → add waypoints or adjust entry/exit points
 - Unbound related nodes → bind_nodes to group them
 - Nodes outside containers → move node or move container and re-check"""

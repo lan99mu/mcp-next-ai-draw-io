@@ -33,6 +33,7 @@ def get_tools_overview_content() -> str:
 
 ## Analysis
 - **detect_line_crossings** — Find crossing connections and get fix suggestions.
+- **detect_overlaps** — Find overlapping shapes (node–node) and shapes that escape their container, with actionable fix suggestions.
 - **suggest_bindings** — Get binding recommendations based on proximity and naming. Optional: `proximity_threshold`.
 """
 
@@ -97,7 +98,7 @@ Use the three MCP prompts in order:
 `load_diagram` → `list_cells` → `bind_nodes` (if needed) → `move_shape` / `update_cell` → `save_diagram`
 
 ### Optimize Layout
-`detect_line_crossings` → `suggest_bindings` → `bind_nodes` → `move_shape` → verify
+`detect_line_crossings` → `detect_overlaps` → `suggest_bindings` → `bind_nodes` → `move_shape` → verify
 """
 
 
