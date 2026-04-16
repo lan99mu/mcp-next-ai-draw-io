@@ -35,6 +35,8 @@ from .binding_handlers import (
     handle_move_shape,
 )
 
+_DEFAULT_SUCCESS_MESSAGE = "ok"
+
 # Dispatch table: op name → handler function
 _OP_HANDLERS: dict[str, Any] = {
     "add_shape": handle_add_shape,
@@ -70,7 +72,7 @@ def handle_batch_operations(arguments: Any) -> list[TextContent]:
             # Call the underlying handler; it returns list[TextContent]
             response = handler(op_args)
             # Extract the text from the first content item for the summary
-            text = response[0].text if response else "ok"
+            text = response[0].text if response else _DEFAULT_SUCCESS_MESSAGE
             results.append(f"[{idx}] {op_name}: {text}")
         except Exception as exc:
             errors.append(f"[{idx}] {op_name} failed: {exc}")

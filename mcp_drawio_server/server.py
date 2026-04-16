@@ -38,7 +38,7 @@ SERVER_INSTRUCTIONS = (
     "Draw.io diagram server. Workflow: "
     "1) Use batch_operations to add all shapes+connections in one call instead of individual add_shape/add_connection calls — this is the preferred approach and saves significant tokens. "
     "2) Use create_diagram(autosave_path=...) or load_diagram(autosave=true) to enable autosave so changes appear on disk immediately without a separate save_diagram call. "
-    "3) For inspection only, use list_cells/get_cell; never call them before mutations unless you need IDs. "
+    "3) Call list_cells/get_cell only when you need to retrieve IDs or inspect existing elements. "
     "4) Call save_diagram explicitly only when autosave is off. "
     "5) For detailed docs on shapes, bindings, or workflows, read the docs:// resources instead of asking questions."
 )
