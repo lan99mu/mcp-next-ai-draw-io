@@ -138,9 +138,19 @@ def get_cells_from_xml(xml_content: str) -> list[dict]:
                                         'x': x,
                                         'y': y,
                                     })
-                            # Note: offset points (as="offset") are label offsets, which are
-                            # handled separately through label_offset_x/y parameters in the
-                            # Connection model and server tool. No additional parsing needed here.
+                            # Parse label offset (as="offset") so downstream
+                            # consumers (e.g. overlap detection) can position
+                            # the edge label relative to its anchor on the
+                            # routed polyline.
+                            elif point_as == 'offset':
+                                x = point.getAttribute('x')
+                                y = point.getAttribute('y')
+                                if x or y:
+                                    try:
+                                        cell_info['label_offset_x'] = float(x) if x else 0.0
+                                        cell_info['label_offset_y'] = float(y) if y else 0.0
+                                    except (TypeError, ValueError):
+                                        pass
                         if geometry_points:
                             cell_info['geometry_points'] = geometry_points
                 

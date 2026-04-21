@@ -490,7 +490,7 @@ def get_tool_definitions() -> list[Tool]:
         ),
         Tool(
             name="detect_overlaps",
-            description="Detect overlapping shapes and out-of-container boundary violations, with fix suggestions.",
+            description="Detect overlapping shapes, out-of-container boundary violations, and edge-label overlaps (label↔node and label↔label), with fix suggestions.",
             inputSchema={
                 "type": "object",
                 "properties": {}

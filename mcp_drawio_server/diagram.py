@@ -474,16 +474,58 @@ class Diagram:
             obstacles.append(shape_id)
         return obstacles
 
+    def _first_blocking_obstacle(
+        self,
+        p1: tuple[float, float],
+        p2: tuple[float, float],
+        obstacle_rects: list[tuple[str, tuple[float, float, float, float]]],
+    ) -> Optional[tuple[str, tuple[float, float, float, float]]]:
+        """Return the first obstacle whose expanded bbox is crossed by segment p1→p2."""
+        for shape_id, rect in obstacle_rects:
+            if self._segment_intersects_rect(p1, p2, rect):
+                return shape_id, rect
+        return None
+
+    def _count_path_intersections(
+        self,
+        path: list[tuple[float, float]],
+        obstacle_rects: list[tuple[str, tuple[float, float, float, float]]],
+    ) -> int:
+        """Count how many (segment, obstacle) pairs intersect for a path."""
+        count = 0
+        for i in range(len(path) - 1):
+            for _shape_id, rect in obstacle_rects:
+                if self._segment_intersects_rect(path[i], path[i + 1], rect):
+                    count += 1
+        return count
+
+    @staticmethod
+    def _path_length(path: list[tuple[float, float]]) -> float:
+        """Return the total length of a polyline path."""
+        total = 0.0
+        for i in range(len(path) - 1):
+            dx = path[i + 1][0] - path[i][0]
+            dy = path[i + 1][1] - path[i][1]
+            total += (dx * dx + dy * dy) ** 0.5
+        return total
+
     def _compute_auto_waypoints(
-        self, source_id: str, target_id: str, margin: float = 20.0
+        self,
+        source_id: str,
+        target_id: str,
+        margin: float = 20.0,
+        max_iterations: int = 6,
     ) -> list[tuple[float, float]]:
         """Compute waypoints that route a connection around intervening shapes.
 
         Returns an empty list when a direct line between source and target
         centers does not cross any other shape's bounding box (expanded by
-        ``margin``).  Otherwise returns one or two waypoints that form an
-        L-shape detour around the first blocking obstacle, preferring the
-        shorter side.
+        ``margin``).  Otherwise iteratively inserts orthogonal detour
+        waypoints around blocking obstacles.  For each blocker, four detour
+        candidates (above / below / left / right) are simulated and the one
+        introducing the fewest residual intersections (ties broken by
+        shortest path length) is kept.  Iteration continues until the path
+        is clear or ``max_iterations`` is reached.
         """
         if source_id not in self.shapes or target_id not in self.shapes:
             return []
@@ -495,44 +537,84 @@ class Diagram:
         if sx_c == tx_c and sy_c == ty_c:
             return []
 
+        # Pre-compute expanded obstacle rects once.
+        obstacle_rects: list[tuple[str, tuple[float, float, float, float]]] = []
         for shape_id in self._obstacle_ids(source_id, target_id):
             x, y, w, h = self._shape_abs_rect(shape_id)
-            expanded = (x - margin, y - margin, w + 2 * margin, h + 2 * margin)
-            if not self._segment_intersects_rect((sx_c, sy_c), (tx_c, ty_c), expanded):
+            if w <= 0 or h <= 0:
                 continue
+            obstacle_rects.append(
+                (shape_id, (x - margin, y - margin, w + 2 * margin, h + 2 * margin))
+            )
 
-            ox, oy, ow, oh = expanded
-            # Determine whether the line is mostly horizontal or vertical and
-            # pick the shorter detour axis accordingly.
-            dx = abs(tx_c - sx_c)
-            dy = abs(ty_c - sy_c)
+        path: list[tuple[float, float]] = [(sx_c, sy_c), (tx_c, ty_c)]
 
-            if dx >= dy:
-                # Mostly horizontal movement → detour above or below the obstacle.
-                # Pick whichever side keeps the path shorter relative to both endpoints.
-                above_y = oy - 1
-                below_y = oy + oh + 1
-                detour_y = above_y if abs(above_y - sy_c) + abs(above_y - ty_c) \
-                    <= abs(below_y - sy_c) + abs(below_y - ty_c) else below_y
-                mid_x = (sx_c + tx_c) / 2.0
-                # Keep the waypoint x within the obstacle's horizontal span
-                # (the detour itself is at ``detour_y`` — above or below the
-                # obstacle — so we want the bend to sit over the obstacle).
-                mid_x = max(min(mid_x, ox + ow + 1), ox - 1)
-                return [(mid_x, detour_y)]
-            else:
-                # Mostly vertical → detour left or right of the obstacle.
-                left_x = ox - 1
-                right_x = ox + ow + 1
-                detour_x = left_x if abs(left_x - sx_c) + abs(left_x - tx_c) \
-                    <= abs(right_x - sx_c) + abs(right_x - tx_c) else right_x
-                mid_y = (sy_c + ty_c) / 2.0
-                # Keep the waypoint y within the obstacle's vertical span so
-                # the bend sits beside the obstacle rather than above/below it.
-                mid_y = max(min(mid_y, oy + oh + 1), oy - 1)
-                return [(detour_x, mid_y)]
+        for _ in range(max_iterations):
+            # Find the first segment that still crosses an obstacle.
+            blocker_index = None
+            blocker = None
+            for i in range(len(path) - 1):
+                b = self._first_blocking_obstacle(path[i], path[i + 1], obstacle_rects)
+                if b is not None:
+                    blocker_index = i
+                    blocker = b
+                    break
+            if blocker is None:
+                break
 
-        return []
+            seg_start = path[blocker_index]
+            seg_end = path[blocker_index + 1]
+            _obs_id, (ox, oy, ow, oh) = blocker
+
+            # Candidate orthogonal detours: route the segment through two
+            # waypoints so that the bypass follows axis-aligned segments.
+            candidates: list[list[tuple[float, float]]] = []
+
+            above_y = oy - 1
+            below_y = oy + oh + 1
+            left_x = ox - 1
+            right_x = ox + ow + 1
+
+            # Route above / below (waypoints share detour_y).
+            for detour_y in (above_y, below_y):
+                wp1 = (seg_start[0], detour_y)
+                wp2 = (seg_end[0], detour_y)
+                candidates.append([wp1, wp2])
+            # Route left / right (waypoints share detour_x).
+            for detour_x in (left_x, right_x):
+                wp1 = (detour_x, seg_start[1])
+                wp2 = (detour_x, seg_end[1])
+                candidates.append([wp1, wp2])
+
+            best_path: Optional[list[tuple[float, float]]] = None
+            best_score: Optional[tuple[int, float]] = None
+            for cand in candidates:
+                # Drop degenerate waypoints (equal to segment endpoints).
+                unique_wps = []
+                for wp in cand:
+                    if wp != seg_start and wp != seg_end and (not unique_wps or wp != unique_wps[-1]):
+                        unique_wps.append(wp)
+                if not unique_wps:
+                    continue
+                new_path = (
+                    path[: blocker_index + 1] + unique_wps + path[blocker_index + 1:]
+                )
+                score = (
+                    self._count_path_intersections(new_path, obstacle_rects),
+                    self._path_length(new_path),
+                )
+                if best_score is None or score < best_score:
+                    best_score = score
+                    best_path = new_path
+
+            if best_path is None:
+                # No candidate improved things; bail out to avoid infinite loops.
+                break
+            path = best_path
+
+        # Strip the synthetic source/target endpoints: the caller only wants
+        # the interior waypoints.
+        return path[1:-1]
 
     def _edge_label_anchor(
         self,
@@ -580,6 +662,57 @@ class Diagram:
             travelled += length
         return path[-1]
 
+    def _estimate_label_half_size(self, label: str) -> tuple[float, float]:
+        """Estimate (half_width, half_height) of the rendered label bounding box."""
+        plain = Diagram._html_to_plain_text(label or "")
+        longest = max((len(line) for line in plain.split('\n')), default=len(plain))
+        half_w = max(
+            _LABEL_MIN_HALF_WIDTH,
+            longest * _LABEL_CHAR_WIDTH_ESTIMATE + _LABEL_HORIZONTAL_PADDING,
+        )
+        line_count = plain.count('\n') + 1 if plain else 1
+        half_h = max(_LABEL_MIN_HALF_HEIGHT, line_count * _LABEL_LINE_HEIGHT)
+        return half_w, half_h
+
+    def _existing_label_rects(
+        self,
+        exclude_conn_id: Optional[str] = None,
+    ) -> list[tuple[float, float, float, float]]:
+        """Return bounding rectangles for every edge label already placed.
+
+        Each rectangle is ``(x, y, w, h)`` in absolute canvas coordinates and
+        incorporates the connection's current ``label_offset_x/y`` if any.
+        Connections without a label or without resolvable endpoints are
+        skipped.
+        """
+        rects: list[tuple[float, float, float, float]] = []
+        for conn_id, conn in self.connections.items():
+            if exclude_conn_id and conn_id == exclude_conn_id:
+                continue
+            if not conn.label:
+                continue
+            if conn.source_id not in self.shapes or conn.target_id not in self.shapes:
+                continue
+            anchor = self._edge_label_anchor(
+                conn.source_id, conn.target_id, list(conn.waypoints or [])
+            )
+            if anchor is None:
+                continue
+            ax = anchor[0] + (conn.label_offset_x or 0.0)
+            ay = anchor[1] + (conn.label_offset_y or 0.0)
+            hw, hh = self._estimate_label_half_size(conn.label)
+            rects.append((ax - hw, ay - hh, 2 * hw, 2 * hh))
+        return rects
+
+    @staticmethod
+    def _rects_overlap(
+        a: tuple[float, float, float, float],
+        b: tuple[float, float, float, float],
+    ) -> bool:
+        ax, ay, aw, ah = a
+        bx, by, bw, bh = b
+        return ax < bx + bw and bx < ax + aw and ay < by + bh and by < ay + ah
+
     def _label_offset_to_avoid_nodes(
         self,
         anchor: tuple[float, float],
@@ -588,14 +721,18 @@ class Diagram:
         label_half_width: float,
         label_half_height: float,
         margin: float = _LABEL_CLEARANCE_MARGIN,
+        other_label_rects: Optional[list[tuple[float, float, float, float]]] = None,
     ) -> Optional[tuple[float, float]]:
-        """Return an (dx, dy) offset pushing the label out of any obscuring node.
+        """Return an (dx, dy) offset pushing the label out of obscuring obstacles.
 
-        Returns ``None`` if the label's estimated box already sits clear of
-        every non-endpoint shape.  The offset is applied by Draw.io as a
-        relative shift from the natural anchor point, so we compute the
-        smallest vertical nudge (preferred) or horizontal nudge that moves
-        the label's bounding box fully outside every overlapped node.
+        Considers **every** non-endpoint node the label currently overlaps as
+        well as the bounding boxes of labels already attached to other
+        connections.  Generates a grid of candidate shifts (axis-aligned push
+        past each obstacle's edge, plus a conservative diagonal fallback) and
+        picks the one that fully clears all obstacles with the smallest
+        total displacement.  If no candidate fully clears, the candidate
+        with the smallest residual overlap area is returned.
+        Returns ``None`` only when the natural anchor already sits clear.
         """
         ax, ay = anchor
         label_rect = (
@@ -606,7 +743,8 @@ class Diagram:
         )
         exclude = {source_id, target_id}
 
-        worst_overlap: Optional[tuple[float, float, float, float]] = None
+        # Collect every node rect the label currently overlaps.
+        node_rects: list[tuple[float, float, float, float]] = []
         for shape_id, shape in self.shapes.items():
             if shape_id in exclude:
                 continue
@@ -616,34 +754,89 @@ class Diagram:
             if shape.parent_id and shape.parent_id in self.shapes:
                 continue
             rx, ry, rw, rh = self._shape_abs_rect(shape_id)
-            if not (
-                label_rect[0] < rx + rw and rx < label_rect[0] + label_rect[2]
-                and label_rect[1] < ry + rh and ry < label_rect[1] + label_rect[3]
-            ):
-                continue
-            worst_overlap = (rx, ry, rw, rh)
-            break  # one obstacle is enough; we will push past it
+            if self._rects_overlap(label_rect, (rx, ry, rw, rh)):
+                node_rects.append((rx, ry, rw, rh))
 
-        if worst_overlap is None:
+        label_rects = list(other_label_rects or [])
+        # Also push away from overlapping existing labels even if no node conflict.
+        conflicting_labels = [
+            lr for lr in label_rects if self._rects_overlap(label_rect, lr)
+        ]
+        if not node_rects and not conflicting_labels:
             return None
 
-        rx, ry, rw, rh = worst_overlap
-        # Vertical nudges (preferred — keeps the label on the line's midpoint
-        # in the horizontal dimension).
-        up_dy = (ry - label_half_height - margin) - ay
-        down_dy = (ry + rh + label_half_height + margin) - ay
-        # Horizontal nudges (fallback).
-        left_dx = (rx - label_half_width - margin) - ax
-        right_dx = (rx + rw + label_half_width + margin) - ax
+        obstacles = node_rects + conflicting_labels
 
-        candidates = [
-            (0.0, up_dy),
-            (0.0, down_dy),
-            (left_dx, 0.0),
-            (right_dx, 0.0),
-        ]
-        # Pick the shortest magnitude shift.
-        return min(candidates, key=lambda c: c[0] * c[0] + c[1] * c[1])
+        # Build candidate (dx, dy) offsets that clear the bounding box past
+        # each obstacle on each of the four axis-aligned sides, plus zero
+        # (to allow early exit when only a fallback label-conflict exists).
+        candidates: list[tuple[float, float]] = [(0.0, 0.0)]
+        for rx, ry, rw, rh in obstacles:
+            up_dy = (ry - label_half_height - margin) - ay
+            down_dy = (ry + rh + label_half_height + margin) - ay
+            left_dx = (rx - label_half_width - margin) - ax
+            right_dx = (rx + rw + label_half_width + margin) - ax
+            candidates.extend([
+                (0.0, up_dy),
+                (0.0, down_dy),
+                (left_dx, 0.0),
+                (right_dx, 0.0),
+            ])
+
+        def overlap_area(
+            r1: tuple[float, float, float, float],
+            r2: tuple[float, float, float, float],
+        ) -> float:
+            ox1 = max(r1[0], r2[0])
+            oy1 = max(r1[1], r2[1])
+            ox2 = min(r1[0] + r1[2], r2[0] + r2[2])
+            oy2 = min(r1[1] + r1[3], r2[1] + r2[3])
+            return max(0.0, ox2 - ox1) * max(0.0, oy2 - oy1)
+
+        def score(candidate: tuple[float, float]) -> tuple[float, float]:
+            """Rank candidate offsets: lower is better.
+
+            Primary: total residual overlap area after the shift (zero means
+            fully clear). Secondary: displacement magnitude (prefer the
+            smallest nudge that still clears every obstacle).
+            """
+            dx, dy = candidate
+            shifted = (
+                label_rect[0] + dx,
+                label_rect[1] + dy,
+                label_rect[2],
+                label_rect[3],
+            )
+            # Primary score term: total overlap area after shift (zero = fully clear).
+            residual = sum(overlap_area(shifted, obs) for obs in obstacles)
+            # Include the union of node rects and other edge labels that were
+            # not originally conflicting, so the chosen offset does not sail
+            # into a different unrelated node.
+            for shape_id, shape in self.shapes.items():
+                if shape_id in exclude:
+                    continue
+                if shape.width <= 0 or shape.height <= 0:
+                    continue
+                if shape.parent_id and shape.parent_id in self.shapes:
+                    continue
+                rect = self._shape_abs_rect(shape_id)
+                if rect in node_rects:
+                    continue
+                residual += overlap_area(shifted, rect)
+            for lr in label_rects:
+                if lr in conflicting_labels:
+                    continue
+                residual += overlap_area(shifted, lr)
+            return (residual, dx * dx + dy * dy)
+
+        best = min(candidates, key=score)
+        if best == (0.0, 0.0):
+            # No improvement possible; still prefer an axis-aligned nudge to
+            # signal an attempt was made rather than accept the overlap.
+            non_trivial = [c for c in candidates if c != (0.0, 0.0)]
+            if non_trivial:
+                best = min(non_trivial, key=score)
+        return best
 
     def add_connection(
         self,
@@ -740,18 +933,13 @@ class Diagram:
             )
             if anchor is not None:
                 # Estimate label bounding box from its rendered text length.
-                plain = Diagram._html_to_plain_text(label)
-                longest = max((len(line) for line in plain.split('\n')), default=len(plain))
-                half_w = max(
-                    _LABEL_MIN_HALF_WIDTH,
-                    longest * _LABEL_CHAR_WIDTH_ESTIMATE + _LABEL_HORIZONTAL_PADDING,
-                )
-                line_count = plain.count('\n') + 1
-                half_h = max(_LABEL_MIN_HALF_HEIGHT, line_count * _LABEL_LINE_HEIGHT)
+                half_w, half_h = self._estimate_label_half_size(label)
+                other_label_rects = self._existing_label_rects()
                 offset = self._label_offset_to_avoid_nodes(
                     anchor, source_id, target_id,
                     label_half_width=half_w,
                     label_half_height=half_h,
+                    other_label_rects=other_label_rects,
                 )
                 if offset is not None:
                     effective_label_offset_x, effective_label_offset_y = offset
