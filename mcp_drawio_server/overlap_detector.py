@@ -99,7 +99,7 @@ def detect_overlaps(cells: list[dict]) -> dict:
         cells: All cells (shapes **and** connections) from the diagram.
 
     Returns:
-        A dictionary with two keys:
+        A dictionary with three keys:
 
         ``node_overlaps``
             List of dicts, one per overlapping pair of sibling shapes::
@@ -127,6 +127,13 @@ def detect_overlaps(cells: list[dict]) -> dict:
                     "container_bounds": [x, y, x2, y2],
                     "suggestion": str,
                 }
+
+        ``label_overlaps``
+            List of dicts describing edge labels that visually overlap either
+            an unrelated node's body or another edge's label.  Entries carry
+            ``issue_type`` = ``edge_label_over_node`` or
+            ``edge_label_over_edge_label`` plus the participating IDs,
+            rendered bounds, and a repair suggestion.
     """
     vertices = [c for c in cells if c.get("vertex")]
     cells_by_id: dict[str, dict] = {c["id"]: c for c in cells}
@@ -227,7 +234,204 @@ def detect_overlaps(cells: list[dict]) -> dict:
     return {
         "node_overlaps": node_overlaps,
         "out_of_container": out_of_container,
+        "label_overlaps": _detect_label_overlaps(cells, abs_bounds),
     }
+
+
+# ---------------------------------------------------------------------------
+# Label overlap detection
+# ---------------------------------------------------------------------------
+
+# Match the label-size heuristic used by diagram.Diagram when placing labels.
+_LABEL_CHAR_WIDTH = 3.5
+_LABEL_H_PADDING = 6.0
+_LABEL_LINE_HEIGHT = 7.0
+_LABEL_MIN_HALF_W = 20.0
+_LABEL_MIN_HALF_H = 8.0
+
+
+def _strip_html(text: str) -> str:
+    import re
+    # Convert <br> and block breaks to newlines, then drop remaining tags.
+    t = re.sub(r"<br\s*/?>", "\n", text, flags=re.IGNORECASE)
+    t = re.sub(r"</(div|p|li|tr|h[1-6])>", "\n", t, flags=re.IGNORECASE)
+    t = re.sub(r"<[^>]+>", "", t)
+    return t
+
+
+def _estimate_label_half_size(label: str) -> tuple[float, float]:
+    """Estimate (half_width, half_height) of a rendered label box."""
+    plain = _strip_html(label or "").strip()
+    if not plain:
+        return _LABEL_MIN_HALF_W, _LABEL_MIN_HALF_H
+    lines = plain.split("\n")
+    longest = max(len(line) for line in lines) if lines else 0
+    half_w = max(_LABEL_MIN_HALF_W, longest * _LABEL_CHAR_WIDTH + _LABEL_H_PADDING)
+    half_h = max(_LABEL_MIN_HALF_H, len(lines) * _LABEL_LINE_HEIGHT)
+    return half_w, half_h
+
+
+def _edge_endpoint(
+    connection: dict,
+    shape_id: str,
+    attr_prefix: str,
+    shapes_bounds: dict[str, tuple[float, float, float, float]],
+    fallback_point_key: str,
+) -> Optional[tuple[float, float]]:
+    """Return the absolute (x, y) anchor for one end of an edge."""
+    if shape_id and shape_id in shapes_bounds:
+        x, y, w, h = shapes_bounds[shape_id]
+        try:
+            fx = float(connection.get(f"{attr_prefix}_x", 0.5))
+            fy = float(connection.get(f"{attr_prefix}_y", 0.5))
+        except (TypeError, ValueError):
+            fx, fy = 0.5, 0.5
+        return (x + w * fx, y + h * fy)
+    point = connection.get(fallback_point_key)
+    if point and len(point) >= 2:
+        try:
+            return (float(point[0]), float(point[1]))
+        except (TypeError, ValueError):
+            return None
+    return None
+
+
+def _edge_label_anchor(
+    connection: dict,
+    shapes_bounds: dict[str, tuple[float, float, float, float]],
+) -> Optional[tuple[float, float]]:
+    """Approximate where Draw.io will anchor the edge label on its polyline."""
+    start = _edge_endpoint(
+        connection, connection.get("source"), "exit", shapes_bounds, "source_point"
+    )
+    end = _edge_endpoint(
+        connection, connection.get("target"), "entry", shapes_bounds, "target_point"
+    )
+    if start is None or end is None:
+        return None
+
+    path: list[tuple[float, float]] = [start]
+    for wp in connection.get("waypoints", []) or []:
+        if isinstance(wp, (list, tuple)) and len(wp) >= 2:
+            try:
+                path.append((float(wp[0]), float(wp[1])))
+            except (TypeError, ValueError):
+                pass
+    path.append(end)
+
+    seg_lengths: list[float] = []
+    total = 0.0
+    for i in range(len(path) - 1):
+        dx = path[i + 1][0] - path[i][0]
+        dy = path[i + 1][1] - path[i][1]
+        length = (dx * dx + dy * dy) ** 0.5
+        seg_lengths.append(length)
+        total += length
+    if total <= 0:
+        return path[0]
+
+    half = total / 2.0
+    travelled = 0.0
+    for i, length in enumerate(seg_lengths):
+        if travelled + length >= half:
+            t = (half - travelled) / length if length else 0.0
+            return (
+                path[i][0] + t * (path[i + 1][0] - path[i][0]),
+                path[i][1] + t * (path[i + 1][1] - path[i][1]),
+            )
+        travelled += length
+    return path[-1]
+
+
+def _detect_label_overlaps(
+    cells: list[dict],
+    abs_bounds: dict[str, tuple[float, float, float, float]],
+) -> list[dict]:
+    """Detect edge-label overlaps against nodes and other edge labels."""
+    shapes_by_id = {c["id"]: c for c in cells if c.get("vertex")}
+    edges = [c for c in cells if c.get("edge")]
+
+    # Collect label rects for every labelled edge.
+    edge_labels: list[dict] = []
+    for edge in edges:
+        label = (edge.get("value") or "").strip()
+        if not label:
+            continue
+        anchor = _edge_label_anchor(edge, abs_bounds)
+        if anchor is None:
+            continue
+        ox = _safe_float(edge.get("label_offset_x"), 0.0)
+        oy = _safe_float(edge.get("label_offset_y"), 0.0)
+        cx = anchor[0] + ox
+        cy = anchor[1] + oy
+        half_w, half_h = _estimate_label_half_size(label)
+        edge_labels.append({
+            "edge_id": edge["id"],
+            "label": _label(edge),
+            "rect": (cx - half_w, cy - half_h, 2 * half_w, 2 * half_h),
+            "source": edge.get("source"),
+            "target": edge.get("target"),
+        })
+
+    overlaps: list[dict] = []
+    seen_pairs: set[tuple[str, str]] = set()
+
+    # 1. edge label ↔ unrelated node body
+    for info in edge_labels:
+        lr = info["rect"]
+        exclude = {info["source"], info["target"]}
+        for shape_id, shape in shapes_by_id.items():
+            if shape_id in exclude:
+                continue
+            if _is_uml_section((shape.get("style") or "").lower()):
+                continue
+            if shape_id not in abs_bounds:
+                continue
+            sx, sy, sw, sh = abs_bounds[shape_id]
+            if sw <= 0 or sh <= 0:
+                continue
+            if _boxes_overlap(lr[0], lr[1], lr[2], lr[3], sx, sy, sw, sh):
+                pair = (info["edge_id"], shape_id)
+                if pair in seen_pairs:
+                    continue
+                seen_pairs.add(pair)
+                overlaps.append({
+                    "issue_type": "edge_label_over_node",
+                    "edge_id": info["edge_id"],
+                    "edge_label": info["label"],
+                    "node_id": shape_id,
+                    "node_label": _label(shape),
+                    "label_bounds": [lr[0], lr[1], lr[0] + lr[2], lr[1] + lr[3]],
+                    "node_bounds": [sx, sy, sx + sw, sy + sh],
+                    "suggestion": (
+                        f"Edge label '{info['label']}' overlaps node '{_label(shape)}'. "
+                        "Adjust the connection's label_offset_x/label_offset_y to push the "
+                        "label clear of the node, or reroute the connection with waypoints."
+                    ),
+                })
+
+    # 2. edge label ↔ edge label
+    for i, a in enumerate(edge_labels):
+        for b in edge_labels[i + 1:]:
+            ax, ay, aw, ah = a["rect"]
+            bx, by, bw, bh = b["rect"]
+            if _boxes_overlap(ax, ay, aw, ah, bx, by, bw, bh):
+                overlaps.append({
+                    "issue_type": "edge_label_over_edge_label",
+                    "edge_id": a["edge_id"],
+                    "edge_label": a["label"],
+                    "other_edge_id": b["edge_id"],
+                    "other_edge_label": b["label"],
+                    "label_bounds": [ax, ay, ax + aw, ay + ah],
+                    "other_label_bounds": [bx, by, bx + bw, by + bh],
+                    "suggestion": (
+                        f"Labels '{a['label']}' and '{b['label']}' overlap. "
+                        "Set distinct label_offset_x/label_offset_y on one of the "
+                        "connections or route the edges along different paths."
+                    ),
+                })
+
+    return overlaps
 
 
 # ---------------------------------------------------------------------------
@@ -244,11 +448,13 @@ def _label(cell: dict) -> str:
 
 
 def _is_uml_section(style: str) -> bool:
-    """Heuristic: return True if the style belongs to a UML class sub-section cell."""
-    return (
-        "portconstraint=eastwest" in style
-        or ("line;" in style and "strokewidth" in style)
-    )
+    """Heuristic: return True if the style belongs to a UML class sub-section cell.
+
+    See ``crossing_detector._is_uml_section``: only the ``portConstraint=eastwest``
+    marker is authoritative; the former ``line;...;strokeWidth`` fallback produced
+    false positives for ordinary line shapes.
+    """
+    return "portconstraint=eastwest" in style
 
 
 def _overlap_suggestion(

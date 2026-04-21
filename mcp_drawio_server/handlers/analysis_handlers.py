@@ -226,8 +226,9 @@ def handle_detect_overlaps(arguments: Any) -> list[TextContent]:
     results = detect_overlaps(cells)
     node_overlaps = results["node_overlaps"]
     out_of_container = results["out_of_container"]
+    label_overlaps = results.get("label_overlaps", [])
 
-    total = len(node_overlaps) + len(out_of_container)
+    total = len(node_overlaps) + len(out_of_container) + len(label_overlaps)
 
     if total == 0:
         return [TextContent(
@@ -253,6 +254,21 @@ def handle_detect_overlaps(arguments: Any) -> list[TextContent]:
                 f"   → Fix: move_shape or update_cell to reposition '{item['shape_id']}' "
                 f"inside '{item['container_id']}'"
             )
+
+    if label_overlaps:
+        result_parts.append(f"\n── Label Overlaps ({len(label_overlaps)}) ──")
+        for i, item in enumerate(label_overlaps, 1):
+            result_parts.append(f"\n{i}. {item['suggestion']}")
+            if item.get("issue_type") == "edge_label_over_node":
+                result_parts.append(
+                    f"   → Fix: update_cell(cell_id='{item['edge_id']}', ...) "
+                    "with adjusted label offset, or add_connection(... label_offset_x=, label_offset_y=)"
+                )
+            else:
+                result_parts.append(
+                    f"   → Fix: set distinct label_offset_x/label_offset_y on "
+                    f"'{item['edge_id']}' or '{item['other_edge_id']}'."
+                )
 
     result_parts.append(
         "\n✨ TIP: Fix overlaps before adding connections to avoid crossing lines."
