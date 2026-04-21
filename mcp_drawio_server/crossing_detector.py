@@ -25,53 +25,56 @@ def get_connection_endpoints(
     """
     source_id = connection.get('source')
     target_id = connection.get('target')
-    
-    if not source_id or not target_id:
+
+    # Get source and target shapes (may be absent if an endpoint is free-floating)
+    source_shape = shapes.get(source_id) if source_id else None
+    target_shape = shapes.get(target_id) if target_id else None
+
+    if not source_shape and not target_shape and not (
+        connection.get('source_point') and connection.get('target_point')
+    ):
+        # Not enough information to compute endpoints.
         return ((0, 0), (0, 0))
-    
-    # Get source and target shapes
-    source_shape = shapes.get(source_id)
-    target_shape = shapes.get(target_id)
-    
-    if not source_shape or not target_shape:
-        return ((0, 0), (0, 0))
-    
-    # Calculate source point
-    if connection.get('source_point'):
-        # Explicit source point
-        start_x = float(connection['source_point'][0])
-        start_y = float(connection['source_point'][1])
-    else:
-        # Use exit point or center
+
+    # Calculate source point.
+    # Draw.io uses the source shape anchor when both a source shape and a
+    # ``sourcePoint`` exist, so we mirror that behaviour here — otherwise
+    # every autosaved edge would be reported as a false crossing.
+    if source_shape:
         src_x = float(source_shape.get('x', 0))
         src_y = float(source_shape.get('y', 0))
         src_w = float(source_shape.get('width', 120))
         src_h = float(source_shape.get('height', 60))
-        
+
         exit_x = float(connection.get('exit_x', 0.5))
         exit_y = float(connection.get('exit_y', 0.5))
-        
+
         start_x = src_x + src_w * exit_x
         start_y = src_y + src_h * exit_y
-    
-    # Calculate target point
-    if connection.get('target_point'):
-        # Explicit target point
-        end_x = float(connection['target_point'][0])
-        end_y = float(connection['target_point'][1])
+    elif connection.get('source_point'):
+        start_x = float(connection['source_point'][0])
+        start_y = float(connection['source_point'][1])
     else:
-        # Use entry point or center
+        return ((0, 0), (0, 0))
+
+    # Calculate target point — same precedence as above.
+    if target_shape:
         tgt_x = float(target_shape.get('x', 0))
         tgt_y = float(target_shape.get('y', 0))
         tgt_w = float(target_shape.get('width', 120))
         tgt_h = float(target_shape.get('height', 60))
-        
+
         entry_x = float(connection.get('entry_x', 0.5))
         entry_y = float(connection.get('entry_y', 0.5))
-        
+
         end_x = tgt_x + tgt_w * entry_x
         end_y = tgt_y + tgt_h * entry_y
-    
+    elif connection.get('target_point'):
+        end_x = float(connection['target_point'][0])
+        end_y = float(connection['target_point'][1])
+    else:
+        return ((0, 0), (0, 0))
+
     return ((start_x, start_y), (end_x, end_y))
 
 

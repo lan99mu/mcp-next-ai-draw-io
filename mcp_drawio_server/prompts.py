@@ -27,7 +27,7 @@ def get_prompt_definitions() -> list[Prompt]:
                 ),
                 PromptArgument(
                     name="diagram_type",
-                    description="Diagram type: flowchart, architecture, uml_class, activity, swimlane",
+                    description="Diagram type: flowchart, architecture, uml_class, activity, swimlane, sequence, component, domain, communication",
                     required=False
                 )
             ]
@@ -67,7 +67,11 @@ def get_prompt_result(name: str, arguments: dict[str, str] | None) -> GetPromptR
         if diagram_type:
             type_hints = {
                 "flowchart": "Use shape_type: rectangle for steps, diamond for decisions, ellipse for start/end.",
-                "architecture": "Use rectangle/cylinder/cloud. Group by layer (UI → API → Data). Space layers 250px apart vertically.",
+                "architecture": (
+                    "Use rectangle/cylinder/cloud/component. Group by layer with container "
+                    "(UI → API → Service → Data). Space layers 250px apart vertically. "
+                    "Put external systems in a separate container or use shape_type=cloud."
+                ),
                 "uml_class": (
                     "Use shape_type: uml_class. Label format: "
                     "'ClassName<br>───────<br>- attr: type<br>───────<br>+ method()'. "
@@ -75,8 +79,36 @@ def get_prompt_result(name: str, arguments: dict[str, str] | None) -> GetPromptR
                     "place each class fully inside its domain via parent_id, keep domains non-overlapping, "
                     "and ensure classes in each domain use consistent grid spacing to avoid overlap."
                 ),
-                "activity": "Use activity_start/end/action/decision/fork/join shapes.",
+                "activity": (
+                    "Use activity_start/end/action/decision/fork/join shapes. "
+                    "Add activity_note for annotations. Keep one primary flow direction (TB or LR)."
+                ),
                 "swimlane": "Use swimlane_pool + swimlane_h/swimlane_v. Place child shapes inside with parent_id.",
+                "sequence": (
+                    "Use shape_type=actor for participants that are human/external, and shape_type=lifeline "
+                    "for each system participant (width≈120, height≈400+ so the dashed lifeline extends down). "
+                    "Arrange lifelines left-to-right at the same y. Draw messages as connections between "
+                    "lifelines with edge_style=straight and the method/event name as the label. "
+                    "Use dashed=True for return messages. Optionally wrap alt/loop blocks with shape_type=uml_frame."
+                ),
+                "component": (
+                    "Use shape_type=component for each module. Group related components inside "
+                    "shape_type=container (one container per subsystem). Dependencies are dashed connections "
+                    "with arrow_type=open; provided/required interfaces can be plain rectangles labeled "
+                    "'«interface»<br>Name'. Keep modules aligned on a grid."
+                ),
+                "domain": (
+                    "Domain call / context map. Use shape_type=container for each bounded context, "
+                    "place services/entities inside via parent_id. Label connections with the concrete "
+                    "action (e.g. '调用下单', '发布订单已支付'). Use dashed edges for async/event flows, "
+                    "solid for synchronous calls."
+                ),
+                "communication": (
+                    "Component communication. Use shape_type=rectangle or component for each component, "
+                    "shape_type=cloud for external systems, shape_type=cylinder for datastores. "
+                    "Every connection must carry a verb-phrase label (e.g. 'HTTP POST /orders', "
+                    "'publish OrderPaid'). Use dashed edges for async/event channels."
+                ),
             }
             type_hint = type_hints.get(diagram_type, "")
 

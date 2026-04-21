@@ -455,7 +455,9 @@ def handle_add_connection(arguments: Any) -> list[TextContent]:
             stroke_width=arguments.get("stroke_width"),
             stroke_color=arguments.get("stroke_color"),
             start_arrow=arguments.get("start_arrow"),
-            end_arrow=arguments.get("end_arrow")
+            end_arrow=arguments.get("end_arrow"),
+            auto_route=arguments.get("auto_route", True),
+            auto_avoid_label_overlap=arguments.get("auto_avoid_label_overlap", True),
         )
         if diagram_state.current_xml:
             diagram_state.current_xml = diagram.to_drawio_xml()

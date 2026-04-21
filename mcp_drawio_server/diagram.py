@@ -22,6 +22,37 @@ UML_SECTION_SEPARATOR = "───────"  # Unicode box drawing for UML s
 HTML_LINE_BREAK_RE = re.compile(r"<br\s*/?>", re.IGNORECASE)
 HTML_BLOCK_BREAK_RE = re.compile(r"</(?:div|p|li|tr|h[1-6])\s*>|<(?:br|hr)\s*/?>", re.IGNORECASE)
 HTML_TAG_RE = re.compile(r"<[^>]+>")
+# Non-HTML line break markers that should be coerced into <br> so every label is
+# rendered as HTML inside Draw.io (labels are expected to be HTML-style).
+NON_HTML_LINE_BREAK_RE = re.compile(r"\\+[ln]")
+
+
+# Label-size estimation constants (used to decide whether a connection label
+# would overlap a node at its natural midpoint).
+_LABEL_CHAR_WIDTH_ESTIMATE = 3.5   # px per character, averaged for mixed text
+_LABEL_HORIZONTAL_PADDING = 6.0    # px on each side of the text block
+_LABEL_LINE_HEIGHT = 7.0           # px per rendered line (half-height units)
+_LABEL_MIN_HALF_WIDTH = 20.0       # floor so tiny labels still reserve space
+_LABEL_MIN_HALF_HEIGHT = 8.0
+_LABEL_CLEARANCE_MARGIN = 8.0      # px gap between label box and any node
+
+
+def coerce_html_label(text: str) -> str:
+    """Coerce a label into HTML-style by normalizing line breaks to ``<br>``.
+
+    Draw.io labels emitted by this server are rendered with ``html=1`` so the
+    expected input is HTML.  Users still occasionally pass plain-text or
+    GraphViz/DOT-style labels (``\\n``, ``\\l``, raw newline); this helper
+    converts all such variants into ``<br>`` so the rendered output is stable.
+    """
+    if not text:
+        return text
+    normalized = text.replace('\r\n', '\n').replace('\r', '\n')
+    # Convert GraphViz ``\l`` / ``\n`` (literal backslash + letter) and actual
+    # newline characters uniformly into HTML line breaks.
+    normalized = NON_HTML_LINE_BREAK_RE.sub('<br>', normalized)
+    normalized = normalized.replace('\n', '<br>')
+    return normalized
 
 
 def _format_number(value: float) -> str:
@@ -356,6 +387,264 @@ class Diagram:
         horizontal_padding = 18  # UML left/right spacing and divider margin
         return max(round(max_visual_width * char_width + horizontal_padding * 2), 120)
     
+    def _shape_center(self, shape_id: str) -> tuple[float, float]:
+        """Return (cx, cy) center of a shape."""
+        s = self.shapes[shape_id]
+        return (s.x + s.width / 2.0, s.y + s.height / 2.0)
+
+    def _shape_abs_rect(self, shape_id: str) -> tuple[float, float, float, float]:
+        """Return (x, y, w, h) of a shape, resolving the parent chain."""
+        s = self.shapes.get(shape_id)
+        if s is None:
+            return (0.0, 0.0, 0.0, 0.0)
+        x, y = float(s.x), float(s.y)
+        parent_id = s.parent_id
+        seen: set[str] = set()
+        while parent_id and parent_id in self.shapes and parent_id not in seen:
+            seen.add(parent_id)
+            p = self.shapes[parent_id]
+            x += float(p.x)
+            y += float(p.y)
+            parent_id = p.parent_id
+        return (x, y, float(s.width), float(s.height))
+
+    @staticmethod
+    def _segment_intersects_rect(
+        p1: tuple[float, float],
+        p2: tuple[float, float],
+        rect: tuple[float, float, float, float],
+    ) -> bool:
+        """Return True if segment p1→p2 passes through the rectangle interior."""
+        rx, ry, rw, rh = rect
+        if rw <= 0 or rh <= 0:
+            return False
+
+        # Fully inside → crosses.
+        def inside(p):
+            return rx < p[0] < rx + rw and ry < p[1] < ry + rh
+
+        if inside(p1) or inside(p2):
+            return True
+
+        # Parametric clipping (Liang–Barsky style) for fast segment-vs-AABB.
+        x1, y1 = p1
+        x2, y2 = p2
+        dx = x2 - x1
+        dy = y2 - y1
+        t_enter = 0.0
+        t_exit = 1.0
+        for p, q in ((-dx, x1 - rx), (dx, rx + rw - x1), (-dy, y1 - ry), (dy, ry + rh - y1)):
+            if abs(p) < 1e-12:
+                if q < 0:
+                    return False
+                continue
+            t = q / p
+            if p < 0:
+                if t > t_exit:
+                    return False
+                if t > t_enter:
+                    t_enter = t
+            else:
+                if t < t_enter:
+                    return False
+                if t < t_exit:
+                    t_exit = t
+        # Require the clipped segment to have non-zero length strictly inside.
+        return t_exit - t_enter > 1e-9
+
+    def _obstacle_ids(self, source_id: str, target_id: str) -> list[str]:
+        """Return shape IDs that should be considered obstacles for a connection."""
+        obstacles = []
+        exclude = {source_id, target_id}
+        # Exclude the source/target's parent chain so we don't try to route
+        # around a container we're already inside.
+        for sid in (source_id, target_id):
+            s = self.shapes.get(sid)
+            while s is not None and s.parent_id:
+                exclude.add(s.parent_id)
+                s = self.shapes.get(s.parent_id)
+        for shape_id, shape in self.shapes.items():
+            if shape_id in exclude:
+                continue
+            # Skip UML child sections: they live inside a parent class shape.
+            if shape.parent_id and shape.parent_id in self.shapes:
+                continue
+            if shape.width <= 0 or shape.height <= 0:
+                continue
+            obstacles.append(shape_id)
+        return obstacles
+
+    def _compute_auto_waypoints(
+        self, source_id: str, target_id: str, margin: float = 20.0
+    ) -> list[tuple[float, float]]:
+        """Compute waypoints that route a connection around intervening shapes.
+
+        Returns an empty list when a direct line between source and target
+        centers does not cross any other shape's bounding box (expanded by
+        ``margin``).  Otherwise returns one or two waypoints that form an
+        L-shape detour around the first blocking obstacle, preferring the
+        shorter side.
+        """
+        if source_id not in self.shapes or target_id not in self.shapes:
+            return []
+        if source_id == target_id:
+            return []
+
+        sx_c, sy_c = self._shape_center(source_id)
+        tx_c, ty_c = self._shape_center(target_id)
+        if sx_c == tx_c and sy_c == ty_c:
+            return []
+
+        for shape_id in self._obstacle_ids(source_id, target_id):
+            x, y, w, h = self._shape_abs_rect(shape_id)
+            expanded = (x - margin, y - margin, w + 2 * margin, h + 2 * margin)
+            if not self._segment_intersects_rect((sx_c, sy_c), (tx_c, ty_c), expanded):
+                continue
+
+            ox, oy, ow, oh = expanded
+            # Determine whether the line is mostly horizontal or vertical and
+            # pick the shorter detour axis accordingly.
+            dx = abs(tx_c - sx_c)
+            dy = abs(ty_c - sy_c)
+
+            if dx >= dy:
+                # Mostly horizontal movement → detour above or below the obstacle.
+                # Pick whichever side keeps the path shorter relative to both endpoints.
+                above_y = oy - 1
+                below_y = oy + oh + 1
+                detour_y = above_y if abs(above_y - sy_c) + abs(above_y - ty_c) \
+                    <= abs(below_y - sy_c) + abs(below_y - ty_c) else below_y
+                mid_x = (sx_c + tx_c) / 2.0
+                # Keep the waypoint x within the obstacle's horizontal span
+                # (the detour itself is at ``detour_y`` — above or below the
+                # obstacle — so we want the bend to sit over the obstacle).
+                mid_x = max(min(mid_x, ox + ow + 1), ox - 1)
+                return [(mid_x, detour_y)]
+            else:
+                # Mostly vertical → detour left or right of the obstacle.
+                left_x = ox - 1
+                right_x = ox + ow + 1
+                detour_x = left_x if abs(left_x - sx_c) + abs(left_x - tx_c) \
+                    <= abs(right_x - sx_c) + abs(right_x - tx_c) else right_x
+                mid_y = (sy_c + ty_c) / 2.0
+                # Keep the waypoint y within the obstacle's vertical span so
+                # the bend sits beside the obstacle rather than above/below it.
+                mid_y = max(min(mid_y, oy + oh + 1), oy - 1)
+                return [(detour_x, mid_y)]
+
+        return []
+
+    def _edge_label_anchor(
+        self,
+        source_id: str,
+        target_id: str,
+        waypoints: list[tuple[float, float]],
+    ) -> Optional[tuple[float, float]]:
+        """Approximate the (x, y) where Draw.io will anchor an edge label.
+
+        Labels on `relative=1` edges default to the geometric midpoint of the
+        routed polyline (source-anchor → waypoints → target-anchor).  This
+        helper returns that midpoint so we can check whether it happens to
+        land inside another shape.
+        """
+        if source_id not in self.shapes or target_id not in self.shapes:
+            return None
+
+        path: list[tuple[float, float]] = [self._shape_center(source_id)]
+        for wp in waypoints:
+            path.append((float(wp[0]), float(wp[1])))
+        path.append(self._shape_center(target_id))
+
+        # Total polyline length.
+        total = 0.0
+        seg_lengths: list[float] = []
+        for i in range(len(path) - 1):
+            dx = path[i + 1][0] - path[i][0]
+            dy = path[i + 1][1] - path[i][1]
+            length = (dx * dx + dy * dy) ** 0.5
+            seg_lengths.append(length)
+            total += length
+
+        if total <= 0:
+            return path[0]
+
+        # Walk half the total length to find the midpoint.
+        half = total / 2.0
+        travelled = 0.0
+        for i, length in enumerate(seg_lengths):
+            if travelled + length >= half:
+                t = (half - travelled) / length if length else 0.0
+                x = path[i][0] + t * (path[i + 1][0] - path[i][0])
+                y = path[i][1] + t * (path[i + 1][1] - path[i][1])
+                return (x, y)
+            travelled += length
+        return path[-1]
+
+    def _label_offset_to_avoid_nodes(
+        self,
+        anchor: tuple[float, float],
+        source_id: str,
+        target_id: str,
+        label_half_width: float,
+        label_half_height: float,
+        margin: float = _LABEL_CLEARANCE_MARGIN,
+    ) -> Optional[tuple[float, float]]:
+        """Return an (dx, dy) offset pushing the label out of any obscuring node.
+
+        Returns ``None`` if the label's estimated box already sits clear of
+        every non-endpoint shape.  The offset is applied by Draw.io as a
+        relative shift from the natural anchor point, so we compute the
+        smallest vertical nudge (preferred) or horizontal nudge that moves
+        the label's bounding box fully outside every overlapped node.
+        """
+        ax, ay = anchor
+        label_rect = (
+            ax - label_half_width,
+            ay - label_half_height,
+            2 * label_half_width,
+            2 * label_half_height,
+        )
+        exclude = {source_id, target_id}
+
+        worst_overlap: Optional[tuple[float, float, float, float]] = None
+        for shape_id, shape in self.shapes.items():
+            if shape_id in exclude:
+                continue
+            if shape.width <= 0 or shape.height <= 0:
+                continue
+            # Skip UML class child sections (any shape with a shape parent).
+            if shape.parent_id and shape.parent_id in self.shapes:
+                continue
+            rx, ry, rw, rh = self._shape_abs_rect(shape_id)
+            if not (
+                label_rect[0] < rx + rw and rx < label_rect[0] + label_rect[2]
+                and label_rect[1] < ry + rh and ry < label_rect[1] + label_rect[3]
+            ):
+                continue
+            worst_overlap = (rx, ry, rw, rh)
+            break  # one obstacle is enough; we will push past it
+
+        if worst_overlap is None:
+            return None
+
+        rx, ry, rw, rh = worst_overlap
+        # Vertical nudges (preferred — keeps the label on the line's midpoint
+        # in the horizontal dimension).
+        up_dy = (ry - label_half_height - margin) - ay
+        down_dy = (ry + rh + label_half_height + margin) - ay
+        # Horizontal nudges (fallback).
+        left_dx = (rx - label_half_width - margin) - ax
+        right_dx = (rx + rw + label_half_width + margin) - ax
+
+        candidates = [
+            (0.0, up_dy),
+            (0.0, down_dy),
+            (left_dx, 0.0),
+            (right_dx, 0.0),
+        ]
+        # Pick the shortest magnitude shift.
+        return min(candidates, key=lambda c: c[0] * c[0] + c[1] * c[1])
+
     def add_connection(
         self,
         source_id: str,
@@ -380,7 +669,9 @@ class Diagram:
         stroke_width: Optional[float] = None,
         stroke_color: Optional[str] = None,
         start_arrow: Optional[str] = None,
-        end_arrow: Optional[str] = None
+        end_arrow: Optional[str] = None,
+        auto_route: bool = True,
+        auto_avoid_label_overlap: bool = True,
     ) -> str:
         """Add a connection between two shapes.
         
@@ -404,7 +695,15 @@ class Diagram:
             stroke_color: Line color (e.g., "#000000")
             start_arrow: Arrow at start (overrides default "none")
             end_arrow: Arrow at end (alternative to arrow_type)
-            
+            auto_route: When True (the default) and the caller did not provide
+                explicit ``waypoints`` / ``source_point`` / ``target_point``,
+                automatically inject a waypoint so the connection routes around
+                any shape that would otherwise lie between source and target.
+            auto_avoid_label_overlap: When True (the default) and ``label`` is
+                non-empty, compute a ``label_offset_x/y`` that pushes the label
+                out of any node its natural midpoint would otherwise obscure.
+                Ignored when the caller supplies either offset explicitly.
+
         Returns:
             The ID of the created connection
         """
@@ -413,7 +712,50 @@ class Diagram:
             
         conn_id = f"conn_{self.next_id}"
         self.next_id += 1
-        
+
+        effective_waypoints = list(waypoints or [])
+        if (
+            auto_route
+            and not effective_waypoints
+            and source_point is None
+            and target_point is None
+            and edge_style in ("orthogonal", "straight", "curved")
+        ):
+            effective_waypoints = self._compute_auto_waypoints(source_id, target_id)
+
+        # Auto-avoid label overlap: if the label's natural midpoint lands
+        # inside another shape, nudge it via label_offset_x/y.
+        effective_label_offset_x = label_offset_x
+        effective_label_offset_y = label_offset_y
+        if (
+            auto_avoid_label_overlap
+            and label
+            and label_offset_x is None
+            and label_offset_y is None
+            and source_point is None
+            and target_point is None
+        ):
+            anchor = self._edge_label_anchor(
+                source_id, target_id, effective_waypoints
+            )
+            if anchor is not None:
+                # Estimate label bounding box from its rendered text length.
+                plain = Diagram._html_to_plain_text(label)
+                longest = max((len(line) for line in plain.split('\n')), default=len(plain))
+                half_w = max(
+                    _LABEL_MIN_HALF_WIDTH,
+                    longest * _LABEL_CHAR_WIDTH_ESTIMATE + _LABEL_HORIZONTAL_PADDING,
+                )
+                line_count = plain.count('\n') + 1
+                half_h = max(_LABEL_MIN_HALF_HEIGHT, line_count * _LABEL_LINE_HEIGHT)
+                offset = self._label_offset_to_avoid_nodes(
+                    anchor, source_id, target_id,
+                    label_half_width=half_w,
+                    label_half_height=half_h,
+                )
+                if offset is not None:
+                    effective_label_offset_x, effective_label_offset_y = offset
+
         self.connections[conn_id] = Connection(
             id=conn_id,
             label=label,
@@ -422,14 +764,14 @@ class Diagram:
             arrow_type=arrow_type,
             style=style,
             label_position=label_position,
-            label_offset_x=label_offset_x,
-            label_offset_y=label_offset_y,
+            label_offset_x=effective_label_offset_x,
+            label_offset_y=effective_label_offset_y,
             label_background_color=label_background_color,
             entry_x=entry_x,
             entry_y=entry_y,
             exit_x=exit_x,
             exit_y=exit_y,
-            waypoints=waypoints or [],
+            waypoints=effective_waypoints,
             source_point=source_point,
             target_point=target_point,
             edge_style=edge_style,
@@ -680,14 +1022,20 @@ class Diagram:
     @staticmethod
     def _normalize_uml_label(label: str) -> str:
         """Normalize UML labels so HTML and GraphViz line breaks parse consistently."""
+        # Convert <br> tags to newlines first so the parser can split by line,
+        # then reuse the shared HTML coercion for any other backslash escapes.
         normalized = HTML_LINE_BREAK_RE.sub('\n', label)
-        return re.sub(r'\\+l', '\n', normalized)
+        return re.sub(r"\\+[ln]", '\n', normalized)
 
     @staticmethod
     def _format_html_label(text: str) -> str:
-        """Format label text as escaped HTML with <br> line breaks."""
-        normalized = text.replace('\r\n', '\n').replace('\r', '\n')
-        return Diagram._escape_xml(normalized.replace('\n', '<br>'))
+        """Format label text as escaped HTML with <br> line breaks.
+
+        Input may be plain text (``\\n``) or already HTML (``<br>``); both are
+        coerced into HTML-style (``<br>``) and then XML-escaped for embedding
+        in Draw.io attribute values.
+        """
+        return Diagram._escape_xml(coerce_html_label(text))
 
     @staticmethod
     def _html_to_plain_text(text: str) -> str:
@@ -735,6 +1083,12 @@ class Diagram:
             "uml_enum": "swimlane;fontStyle=1;align=center;verticalAlign=top;childLayout=stackLayout;horizontal=1;startSize=26;horizontalStack=0;resizeParent=1;resizeParentMax=0;resizeLast=0;collapsible=1;marginBottom=0;whiteSpace=wrap;html=1;",
             "uml_package": "shape=folder;fontStyle=1;tabWidth=110;tabHeight=30;tabPosition=left;html=1;boundedLbl=1;labelInHeader=1;whiteSpace=wrap;",
             "uml_note": "shape=note;whiteSpace=wrap;html=1;backgroundOutline=1;darkOpacity=0.05;size=15;",
+
+            # UML Component / Sequence-diagram shapes
+            "actor": "shape=umlActor;verticalLabelPosition=bottom;verticalAlign=top;html=1;outlineConnect=0;",
+            "lifeline": "shape=umlLifeline;perimeter=lifelinePerimeter;whiteSpace=wrap;html=1;container=1;dropTarget=0;collapsible=0;recursiveResize=0;outlineConnect=0;",
+            "uml_frame": "shape=umlFrame;whiteSpace=wrap;html=1;pointerEvents=0;",
+            "component": "shape=component;align=left;spacingLeft=36;whiteSpace=wrap;html=1;",
         }
         return styles.get(shape_type, styles["rectangle"])
     

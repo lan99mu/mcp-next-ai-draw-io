@@ -20,9 +20,9 @@ def get_tools_overview_content() -> str:
 - **get_cell** — Get detailed geometry, style, and bindings for one cell. Required: `cell_id`.
 
 ## Shape & Connection
-- **add_shape** — Add a shape. Required: `label`. Key options: `shape_type`, `x`, `y`, `width`, `height`, colors, `parent_id`.
-- **add_connection** — Connect two shapes. Required: `source_id`, `target_id`. Key options: `label`, `edge_style`, `arrow_type`, `entry_x/y`, `exit_x/y`, `waypoints`.
-- **update_cell** — Update label, position, size, or style. Required: `cell_id`. Only specified fields change.
+- **add_shape** — Add a shape. Required: `label` (HTML-style, use `<br>` for line breaks; plain `\n`/`\l` is auto-converted). Key options: `shape_type`, `x`, `y`, `width`, `height`, colors, `parent_id`.
+- **add_connection** — Connect two shapes. Required: `source_id`, `target_id`. Key options: `label` (HTML-style), `edge_style`, `arrow_type`, `entry_x/y`, `exit_x/y`, `waypoints`, `auto_route` (default `true` — auto-adds a waypoint so the line routes around intervening shapes).
+- **update_cell** — Update label (HTML-style), position, size, or style. Required: `cell_id`. Only specified fields change.
 - **delete_cell** — Remove a cell. Required: `cell_id`.
 
 ## Binding & Layout
@@ -146,7 +146,18 @@ def get_shapes_reference_content() -> str:
 | `uml_package` | Package/namespace |
 | `uml_note` | Comment/note |
 
+## Sequence / Component Diagram
+| Shape | Use For |
+|-------|---------|
+| `actor` | UML stick-figure participant (external user / role) |
+| `lifeline` | Vertical dashed lifeline with labelled header (sequence participant) |
+| `uml_frame` | alt/loop/opt interaction frame wrapper |
+| `component` | UML component (module / service with port notch) |
+
 UML label format: `ClassName<br>───────<br>- attr: type<br>───────<br>+ method()`
+
+## Label Format (Important)
+All labels are rendered as HTML (`html=1`). **Always use HTML-style labels**, i.e. use `<br>` for line breaks. Plain `\n` and GraphViz `\l` / `\n` escapes are auto-converted to `<br>`, but prefer emitting HTML directly so what you send is what gets rendered.
 
 ## Style Options
 Shapes: `fill_color`, `stroke_color`, `font_color`, `font_size`, `dashed`, `rounded`, `stroke_width`, `opacity`, `overflow`, `auto_size`

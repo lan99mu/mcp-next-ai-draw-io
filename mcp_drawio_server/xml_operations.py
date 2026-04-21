@@ -1,5 +1,5 @@
 """
-XML parsing and manipulation operations for Draw.io files.
+XML parsing and manipulation operations for Draw.io diagrams.
 
 This module provides functions for parsing, reading, and modifying
 Draw.io XML structures.
@@ -8,6 +8,8 @@ Draw.io XML structures.
 from typing import Optional
 from xml.dom import minidom
 
+from .diagram import coerce_html_label
+
 
 def _is_non_empty_string(value: Optional[str]) -> bool:
     """Return True when an XML attribute contains a non-empty string value."""
@@ -15,8 +17,13 @@ def _is_non_empty_string(value: Optional[str]) -> bool:
 
 
 def _format_html_value(value: str) -> str:
-    """Normalize multiline labels into Draw.io HTML label format."""
-    return value.replace('\r\n', '\n').replace('\r', '\n').replace('\n', '<br>')
+    """Normalize multiline labels into Draw.io HTML label format.
+
+    Accepts plain text (``\\n``), GraphViz style (``\\l``) or already-HTML
+    labels and consistently emits ``<br>`` line breaks so every label the
+    server writes back is HTML-style.
+    """
+    return coerce_html_label(value)
 
 
 def parse_drawio_xml(xml_content: str) -> minidom.Document:
