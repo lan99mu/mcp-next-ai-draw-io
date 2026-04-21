@@ -505,7 +505,9 @@ class Diagram:
                 detour_y = above_y if abs(above_y - sy_c) + abs(above_y - ty_c) \
                     <= abs(below_y - sy_c) + abs(below_y - ty_c) else below_y
                 mid_x = (sx_c + tx_c) / 2.0
-                # Clamp mid_x so the waypoint is actually beside the obstacle.
+                # Keep the waypoint x within the obstacle's horizontal span
+                # (the detour itself is at ``detour_y`` — above or below the
+                # obstacle — so we want the bend to sit over the obstacle).
                 mid_x = max(min(mid_x, ox + ow + 1), ox - 1)
                 return [(mid_x, detour_y)]
             else:
@@ -515,6 +517,8 @@ class Diagram:
                 detour_x = left_x if abs(left_x - sx_c) + abs(left_x - tx_c) \
                     <= abs(right_x - sx_c) + abs(right_x - tx_c) else right_x
                 mid_y = (sy_c + ty_c) / 2.0
+                # Keep the waypoint y within the obstacle's vertical span so
+                # the bend sits beside the obstacle rather than above/below it.
                 mid_y = max(min(mid_y, oy + oh + 1), oy - 1)
                 return [(detour_x, mid_y)]
 
