@@ -146,6 +146,14 @@ def get_shapes_reference_content() -> str:
 | `uml_package` | Package/namespace |
 | `uml_note` | Comment/note |
 
+## Sequence / Component Diagram
+| Shape | Use For |
+|-------|---------|
+| `actor` | UML stick-figure participant (external user / role) |
+| `lifeline` | Vertical dashed lifeline with labelled header (sequence participant) |
+| `uml_frame` | alt/loop/opt interaction frame wrapper |
+| `component` | UML component (module / service with port notch) |
+
 UML label format: `ClassName<br>───────<br>- attr: type<br>───────<br>+ method()`
 
 ## Label Format (Important)

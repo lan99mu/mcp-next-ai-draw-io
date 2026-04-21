@@ -131,7 +131,8 @@ def get_tool_definitions() -> list[Tool]:
                             "activity_start", "activity_end", "activity_action", "activity_decision",
                             "activity_fork", "activity_join", "activity_send_signal", "activity_receive_signal", "activity_note",
                             "swimlane_pool", "swimlane_h", "swimlane_v", "container",
-                            "uml_class", "uml_interface", "uml_abstract_class", "uml_enum", "uml_package", "uml_note"
+                            "uml_class", "uml_interface", "uml_abstract_class", "uml_enum", "uml_package", "uml_note",
+                            "actor", "lifeline", "uml_frame", "component"
                         ],
                         "default": "rectangle"
                     },
@@ -340,6 +341,11 @@ def get_tool_definitions() -> list[Tool]:
                     "auto_route": {
                         "type": "boolean",
                         "description": "When true (default), automatically insert a waypoint so the connection routes around any shape that lies between source and target. Set false to draw a straight line even if it crosses other nodes.",
+                        "default": True
+                    },
+                    "auto_avoid_label_overlap": {
+                        "type": "boolean",
+                        "description": "When true (default) and the connection has a non-empty label, automatically compute a label_offset_x/y so the label sits outside any node its natural midpoint would obscure. Ignored when label_offset_x or label_offset_y is explicitly provided.",
                         "default": True
                     }
                 },

@@ -1,16 +1,17 @@
 ---
 name: drawio-diagramming
-description: "mcp-next-ai-draw-io 仓库里的 .drawio 画图工作流与仓库规范。Use when: 新增/修改架构图、通信图、领域模型图、流程图；需要批量加节点/连线、自动布局、减少线交叉、避免连线穿过节点、统一命名与分层；并输出可验收的变更摘要。"
-argument-hint: "给我：目标 .drawio 路径（或新建目录）+ 图类型 + 节点清单 + 关系清单（表格/JSON 都可）+ 主题范围（这张图回答什么问题）"
+description: "mcp-next-ai-draw-io 仓库里的 .drawio 画图工作流与仓库规范。Use when: 画架构图 / 时序图 / 领域调用关系图 / 组件通信图 / 活动图 / 流程图 / 类图等；新增或修改节点与连线；需要批量加节点/连线、自动布局、避免连线穿过节点、避免连线 label 遮挡节点、统一命名与分层；并输出可验收的变更摘要。"
+argument-hint: "给我：目标 .drawio 路径（或新建目录）+ 图类型（arch/sequence/comm/domain/activity/flow/class）+ 节点清单 + 关系清单（表格/JSON 都可）+ 主题范围（这张图回答什么问题）"
 user-invocable: true
 ---
 
 # Draw.io 画图（mcp-next-ai-draw-io 仓库规范版）
 
-目标：把架构/流程/领域关系**稳定**落到仓库的 `.drawio` 文件中，并确保：
+目标：把架构 / 时序 / 领域调用 / 组件通信 / 活动 / 流程 / 类图等**稳定**落到仓库的 `.drawio` 文件中，并确保：
 - 图可读、可维护、可检索
 - 修改可追踪、可验收、尽量避免冲突/覆盖
 - 连线避开节点，不允许穿过无关节点
+- **连线 label 不得遮挡节点**
 - **文本标签始终使用 HTML 风格**（换行用 `<br>`）
 - 优先复用本项目已有的 MCP 工具能力，而不是手工改 XML
 
@@ -21,7 +22,7 @@ user-invocable: true
 - 遵循用户给出的目标路径；skill 不写死默认目录
 - 只描述“要新建一张图”但没给路径时，先确认保存目录再开始
 - 建议文件名：`<根目录>/<域>/<主题>-<图类型>.drawio` 或 `<根目录>/<域>/<序号>-<主题>-<图类型>.drawio`
-- `<图类型>`：`arch` / `comm` / `domain` / `flow`
+- `<图类型>`：`arch` / `sequence` / `comm` / `domain` / `activity` / `flow` / `class`
 - 避免 `Untitled`；文件名短、稳定、可检索；图内可中文，文件名避免纯中文长串
 
 ---
@@ -30,7 +31,7 @@ user-invocable: true
 
 必填：
 1. **目标文件**：已有文件路径，或新建所需的目录 + 文件名建议
-2. **图类型**：架构 / 组件通信 / 领域模型 / 业务流程
+2. **图类型**：架构（arch）/ 时序（sequence）/ 组件通信（comm）/ 领域调用（domain）/ 活动（activity）/ 业务流程（flow）/ 类图（class）
 3. **主题范围一句话**：例如“广告投放链路中投放服务与计费服务之间的调用/事件关系”
 4. **节点清单**
 5. **关系清单**（至少 1 条）
@@ -68,23 +69,29 @@ user-invocable: true
 
 ## 4. 形状与线条语义
 
-形状：
-- `container` 域/子系统边界；`rectangle` 服务/组件；`cylinder` 存储；`cloud` 外部系统
-- 流程：`activity_start` / `activity_action` / `activity_decision` / `activity_end`
-- 领域模型：`uml_class` / `uml_enum` / `uml_interface`
+形状（按图类型分组）：
+- 通用：`container` 域/子系统边界；`rectangle` 服务/组件；`cylinder` 存储；`cloud` 外部系统
+- 流程图：`activity_start` / `activity_action` / `activity_decision` / `activity_end` / `activity_fork` / `activity_join`
+- 领域模型 / 类图：`uml_class` / `uml_enum` / `uml_interface` / `uml_abstract_class` / `uml_package` / `uml_note`
+- 时序图：`actor`（外部角色，简笔人）/ `lifeline`（生命线，带头部标签，纵向 400+）/ `uml_frame`（alt / loop / opt 块）
+- 组件图：`component`（带端口凹口的 UML 组件）
+- 泳道：`swimlane_pool` / `swimlane_h` / `swimlane_v`
 
 线条：
 - 调用（HTTP/gRPC）= 实线 + classic 箭头
 - 发布/订阅（Kafka/RabbitMQ）= 虚线 + classic 箭头
 - 读写存储 = 实线
+- 时序图返回消息 = 虚线
 - **所有连线都必须有 label**（动词/动作短语），除非需求显式声明例外
+- **连线 label 不得遮挡任何节点**；`add_connection(auto_avoid_label_overlap=true)` 会自动把 label 偏移到空白区域
 
 布局优先级（从高到低）：
-1. 连线不穿过无关节点
-2. 连线交叉数最少
-3. 同类节点对齐、留白一致
-4. 方向一致（LR 或 TB 不混用）
-5. 外部系统与内部系统视觉区隔
+1. 连线不穿过无关节点（`auto_route=true`）
+2. 连线 label 不遮挡任何节点（`auto_avoid_label_overlap=true`）
+3. 连线交叉数最少
+4. 同类节点对齐、留白一致
+5. 方向一致（LR 或 TB 不混用）
+6. 外部系统与内部系统视觉区隔
 
 ---
 
@@ -134,22 +141,26 @@ user-invocable: true
 
 ## 7. 分图类型专用规则
 
-- **架构图（arch）**：先画系统边界，再放服务/存储/外部依赖；推荐分层（入口 → 应用 → 数据 → 外部）；同层组件对齐
-- **组件通信图（comm）**：重点表达“谁调谁 / 谁发给谁 / 经过什么协议”；同步 vs 异步视觉区分；一条边只表达一个主要动作
-- **领域模型图（domain）**：优先 `uml_class` / `uml_enum` / `uml_interface`；类名、属性、方法统一命名；多行文本必须用 `<br>`
+- **架构图（arch）**：先画系统边界（`container`），再放服务（`rectangle` / `component`）/ 存储（`cylinder`）/ 外部依赖（`cloud`）；推荐分层（入口 → 应用 → 数据 → 外部）；同层组件对齐
+- **组件通信图（comm）**：重点表达“谁调谁 / 谁发给谁 / 经过什么协议”；同步（实线）vs 异步（虚线）视觉区分；一条边只表达一个主要动作；推荐使用 `component` 画组件
+- **时序图（sequence）**：参与者放在同一 y 坐标、从左到右；外部角色用 `actor`，系统参与者用 `lifeline`（`height` ≥ 400 以伸展出虚线生命线）；消息连线使用 `edge_style=straight`；返回消息用 `dashed=true`；对 `alt` / `loop` / `opt` 段使用 `uml_frame` 包裹
+- **领域调用关系图（domain）**：每个限界上下文一个 `container`，其内部实体/服务通过 `parent_id` 放入；调用（同步）用实线，事件（异步）用虚线；label 用具体动作动词（"调用下单"、"发布订单已支付"）
+- **领域模型图（class）**：优先 `uml_class` / `uml_enum` / `uml_interface`；类名、属性、方法统一命名；多行文本必须用 `<br>`
 - **业务流程图（flow）**：起止节点清晰；决策节点必须有分支条件；主路径单方向阅读
+- **活动图（activity）**：`activity_start` → `activity_action` / `activity_decision` / `activity_fork` / `activity_join` → `activity_end`；保持单一主方向
 
 ---
 
 ## 8. 质量门禁（保存前必查）
 
 1. **连线穿过节点**：`detect_line_crossings()` 中 `issue_type=node_crossing` 必须为 0；如仍有，手动加 `waypoints` 或调 `entry/exit`
-2. **连线交叉数**：`detect_line_crossings()` 中 `issue_type=line_crossing` 尽量为 0
-3. **节点重叠 / 越界**：`detect_overlaps()` 必须为 0
-4. **无 label 的连线数量**：0（除非显式豁免）
-5. **外部系统分组**：已通过容器 / 虚线边框 / `cloud` 视觉区隔
-6. **命名一致性**：同一概念无多种叫法
-7. **局部可维护性**：应一起移动的节点已 `bind_nodes`
+2. **连线 label 遮挡节点**：`add_connection` 默认 `auto_avoid_label_overlap=true`；如仍遮挡，手动设置 `label_offset_x/label_offset_y`
+3. **连线交叉数**：`detect_line_crossings()` 中 `issue_type=line_crossing` 尽量为 0
+4. **节点重叠 / 越界**：`detect_overlaps()` 必须为 0
+5. **无 label 的连线数量**：0（除非显式豁免）
+6. **外部系统分组**：已通过容器 / 虚线边框 / `cloud` 视觉区隔
+7. **命名一致性**：同一概念无多种叫法
+8. **局部可维护性**：应一起移动的节点已 `bind_nodes`
 
 ---
 
