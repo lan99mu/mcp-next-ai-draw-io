@@ -8,8 +8,9 @@ def test_label_offset_inserted_when_midpoint_inside_node():
     """When the label's midpoint would land inside another node, an offset is added."""
     diagram = Diagram(name="Label Overlap")
 
-    # A and B are far apart on the x axis; the label midpoint (around x=200, y=30)
-    # falls directly inside the obstacle.
+    # A and B span x=0..480, so the label's natural midpoint sits around (200, 30).
+    # The obstacle below is deliberately centred over that midpoint (x=140..260,
+    # y=-20..80) so the label's bounding box falls inside it.
     source = diagram.add_shape('A', x=0, y=0, width=80, height=60)
     target = diagram.add_shape('B', x=400, y=0, width=80, height=60)
     # Place obstacle centered on the natural label midpoint.  Auto-route will

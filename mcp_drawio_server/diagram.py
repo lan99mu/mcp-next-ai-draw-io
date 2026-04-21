@@ -27,6 +27,16 @@ HTML_TAG_RE = re.compile(r"<[^>]+>")
 NON_HTML_LINE_BREAK_RE = re.compile(r"\\+[ln]")
 
 
+# Label-size estimation constants (used to decide whether a connection label
+# would overlap a node at its natural midpoint).
+_LABEL_CHAR_WIDTH_ESTIMATE = 3.5   # px per character, averaged for mixed text
+_LABEL_HORIZONTAL_PADDING = 6.0    # px on each side of the text block
+_LABEL_LINE_HEIGHT = 7.0           # px per rendered line (half-height units)
+_LABEL_MIN_HALF_WIDTH = 20.0       # floor so tiny labels still reserve space
+_LABEL_MIN_HALF_HEIGHT = 8.0
+_LABEL_CLEARANCE_MARGIN = 8.0      # px gap between label box and any node
+
+
 def coerce_html_label(text: str) -> str:
     """Coerce a label into HTML-style by normalizing line breaks to ``<br>``.
 
@@ -575,9 +585,9 @@ class Diagram:
         anchor: tuple[float, float],
         source_id: str,
         target_id: str,
-        label_half_width: float = 40.0,
-        label_half_height: float = 10.0,
-        margin: float = 8.0,
+        label_half_width: float,
+        label_half_height: float,
+        margin: float = _LABEL_CLEARANCE_MARGIN,
     ) -> Optional[tuple[float, float]]:
         """Return an (dx, dy) offset pushing the label out of any obscuring node.
 
@@ -732,9 +742,12 @@ class Diagram:
                 # Estimate label bounding box from its rendered text length.
                 plain = Diagram._html_to_plain_text(label)
                 longest = max((len(line) for line in plain.split('\n')), default=len(plain))
-                half_w = max(20.0, longest * 3.5 + 6.0)
+                half_w = max(
+                    _LABEL_MIN_HALF_WIDTH,
+                    longest * _LABEL_CHAR_WIDTH_ESTIMATE + _LABEL_HORIZONTAL_PADDING,
+                )
                 line_count = plain.count('\n') + 1
-                half_h = max(8.0, line_count * 7.0)
+                half_h = max(_LABEL_MIN_HALF_HEIGHT, line_count * _LABEL_LINE_HEIGHT)
                 offset = self._label_offset_to_avoid_nodes(
                     anchor, source_id, target_id,
                     label_half_width=half_w,
