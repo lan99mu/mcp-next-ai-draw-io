@@ -22,6 +22,27 @@ UML_SECTION_SEPARATOR = "───────"  # Unicode box drawing for UML s
 HTML_LINE_BREAK_RE = re.compile(r"<br\s*/?>", re.IGNORECASE)
 HTML_BLOCK_BREAK_RE = re.compile(r"</(?:div|p|li|tr|h[1-6])\s*>|<(?:br|hr)\s*/?>", re.IGNORECASE)
 HTML_TAG_RE = re.compile(r"<[^>]+>")
+# Non-HTML line break markers that should be coerced into <br> so every label is
+# rendered as HTML inside Draw.io (labels are expected to be HTML-style).
+NON_HTML_LINE_BREAK_RE = re.compile(r"\\+[ln]")
+
+
+def coerce_html_label(text: str) -> str:
+    """Coerce a label into HTML-style by normalizing line breaks to ``<br>``.
+
+    Draw.io labels emitted by this server are rendered with ``html=1`` so the
+    expected input is HTML.  Users still occasionally pass plain-text or
+    GraphViz/DOT-style labels (``\\n``, ``\\l``, raw newline); this helper
+    converts all such variants into ``<br>`` so the rendered output is stable.
+    """
+    if not text:
+        return text
+    normalized = text.replace('\r\n', '\n').replace('\r', '\n')
+    # Convert GraphViz ``\l`` / ``\n`` (literal backslash + letter) and actual
+    # newline characters uniformly into HTML line breaks.
+    normalized = NON_HTML_LINE_BREAK_RE.sub('<br>', normalized)
+    normalized = normalized.replace('\n', '<br>')
+    return normalized
 
 
 def _format_number(value: float) -> str:
@@ -356,6 +377,149 @@ class Diagram:
         horizontal_padding = 18  # UML left/right spacing and divider margin
         return max(round(max_visual_width * char_width + horizontal_padding * 2), 120)
     
+    def _shape_center(self, shape_id: str) -> tuple[float, float]:
+        """Return (cx, cy) center of a shape."""
+        s = self.shapes[shape_id]
+        return (s.x + s.width / 2.0, s.y + s.height / 2.0)
+
+    def _shape_abs_rect(self, shape_id: str) -> tuple[float, float, float, float]:
+        """Return (x, y, w, h) of a shape, resolving the parent chain."""
+        s = self.shapes.get(shape_id)
+        if s is None:
+            return (0.0, 0.0, 0.0, 0.0)
+        x, y = float(s.x), float(s.y)
+        parent_id = s.parent_id
+        seen: set[str] = set()
+        while parent_id and parent_id in self.shapes and parent_id not in seen:
+            seen.add(parent_id)
+            p = self.shapes[parent_id]
+            x += float(p.x)
+            y += float(p.y)
+            parent_id = p.parent_id
+        return (x, y, float(s.width), float(s.height))
+
+    @staticmethod
+    def _segment_intersects_rect(
+        p1: tuple[float, float],
+        p2: tuple[float, float],
+        rect: tuple[float, float, float, float],
+    ) -> bool:
+        """Return True if segment p1→p2 passes through the rectangle interior."""
+        rx, ry, rw, rh = rect
+        if rw <= 0 or rh <= 0:
+            return False
+
+        # Fully inside → crosses.
+        def inside(p):
+            return rx < p[0] < rx + rw and ry < p[1] < ry + rh
+
+        if inside(p1) or inside(p2):
+            return True
+
+        # Parametric clipping (Liang–Barsky style) for fast segment-vs-AABB.
+        x1, y1 = p1
+        x2, y2 = p2
+        dx = x2 - x1
+        dy = y2 - y1
+        t_enter = 0.0
+        t_exit = 1.0
+        for p, q in ((-dx, x1 - rx), (dx, rx + rw - x1), (-dy, y1 - ry), (dy, ry + rh - y1)):
+            if abs(p) < 1e-12:
+                if q < 0:
+                    return False
+                continue
+            t = q / p
+            if p < 0:
+                if t > t_exit:
+                    return False
+                if t > t_enter:
+                    t_enter = t
+            else:
+                if t < t_enter:
+                    return False
+                if t < t_exit:
+                    t_exit = t
+        # Require the clipped segment to have non-zero length strictly inside.
+        return t_exit - t_enter > 1e-9
+
+    def _obstacle_ids(self, source_id: str, target_id: str) -> list[str]:
+        """Return shape IDs that should be considered obstacles for a connection."""
+        obstacles = []
+        exclude = {source_id, target_id}
+        # Exclude the source/target's parent chain so we don't try to route
+        # around a container we're already inside.
+        for sid in (source_id, target_id):
+            s = self.shapes.get(sid)
+            while s is not None and s.parent_id:
+                exclude.add(s.parent_id)
+                s = self.shapes.get(s.parent_id)
+        for shape_id, shape in self.shapes.items():
+            if shape_id in exclude:
+                continue
+            # Skip UML child sections: they live inside a parent class shape.
+            if shape.parent_id and shape.parent_id in self.shapes:
+                continue
+            if shape.width <= 0 or shape.height <= 0:
+                continue
+            obstacles.append(shape_id)
+        return obstacles
+
+    def _compute_auto_waypoints(
+        self, source_id: str, target_id: str, margin: float = 20.0
+    ) -> list[tuple[float, float]]:
+        """Compute waypoints that route a connection around intervening shapes.
+
+        Returns an empty list when a direct line between source and target
+        centers does not cross any other shape's bounding box (expanded by
+        ``margin``).  Otherwise returns one or two waypoints that form an
+        L-shape detour around the first blocking obstacle, preferring the
+        shorter side.
+        """
+        if source_id not in self.shapes or target_id not in self.shapes:
+            return []
+        if source_id == target_id:
+            return []
+
+        sx_c, sy_c = self._shape_center(source_id)
+        tx_c, ty_c = self._shape_center(target_id)
+        if sx_c == tx_c and sy_c == ty_c:
+            return []
+
+        for shape_id in self._obstacle_ids(source_id, target_id):
+            x, y, w, h = self._shape_abs_rect(shape_id)
+            expanded = (x - margin, y - margin, w + 2 * margin, h + 2 * margin)
+            if not self._segment_intersects_rect((sx_c, sy_c), (tx_c, ty_c), expanded):
+                continue
+
+            ox, oy, ow, oh = expanded
+            # Determine whether the line is mostly horizontal or vertical and
+            # pick the shorter detour axis accordingly.
+            dx = abs(tx_c - sx_c)
+            dy = abs(ty_c - sy_c)
+
+            if dx >= dy:
+                # Mostly horizontal movement → detour above or below the obstacle.
+                # Pick whichever side keeps the path shorter relative to both endpoints.
+                above_y = oy - 1
+                below_y = oy + oh + 1
+                detour_y = above_y if abs(above_y - sy_c) + abs(above_y - ty_c) \
+                    <= abs(below_y - sy_c) + abs(below_y - ty_c) else below_y
+                mid_x = (sx_c + tx_c) / 2.0
+                # Clamp mid_x so the waypoint is actually beside the obstacle.
+                mid_x = max(min(mid_x, ox + ow + 1), ox - 1)
+                return [(mid_x, detour_y)]
+            else:
+                # Mostly vertical → detour left or right of the obstacle.
+                left_x = ox - 1
+                right_x = ox + ow + 1
+                detour_x = left_x if abs(left_x - sx_c) + abs(left_x - tx_c) \
+                    <= abs(right_x - sx_c) + abs(right_x - tx_c) else right_x
+                mid_y = (sy_c + ty_c) / 2.0
+                mid_y = max(min(mid_y, oy + oh + 1), oy - 1)
+                return [(detour_x, mid_y)]
+
+        return []
+
     def add_connection(
         self,
         source_id: str,
@@ -380,7 +544,8 @@ class Diagram:
         stroke_width: Optional[float] = None,
         stroke_color: Optional[str] = None,
         start_arrow: Optional[str] = None,
-        end_arrow: Optional[str] = None
+        end_arrow: Optional[str] = None,
+        auto_route: bool = True,
     ) -> str:
         """Add a connection between two shapes.
         
@@ -404,7 +569,11 @@ class Diagram:
             stroke_color: Line color (e.g., "#000000")
             start_arrow: Arrow at start (overrides default "none")
             end_arrow: Arrow at end (alternative to arrow_type)
-            
+            auto_route: When True (the default) and the caller did not provide
+                explicit ``waypoints`` / ``source_point`` / ``target_point``,
+                automatically inject a waypoint so the connection routes around
+                any shape that would otherwise lie between source and target.
+
         Returns:
             The ID of the created connection
         """
@@ -413,7 +582,17 @@ class Diagram:
             
         conn_id = f"conn_{self.next_id}"
         self.next_id += 1
-        
+
+        effective_waypoints = list(waypoints or [])
+        if (
+            auto_route
+            and not effective_waypoints
+            and source_point is None
+            and target_point is None
+            and edge_style in ("orthogonal", "straight", "curved")
+        ):
+            effective_waypoints = self._compute_auto_waypoints(source_id, target_id)
+
         self.connections[conn_id] = Connection(
             id=conn_id,
             label=label,
@@ -429,7 +608,7 @@ class Diagram:
             entry_y=entry_y,
             exit_x=exit_x,
             exit_y=exit_y,
-            waypoints=waypoints or [],
+            waypoints=effective_waypoints,
             source_point=source_point,
             target_point=target_point,
             edge_style=edge_style,
@@ -680,14 +859,20 @@ class Diagram:
     @staticmethod
     def _normalize_uml_label(label: str) -> str:
         """Normalize UML labels so HTML and GraphViz line breaks parse consistently."""
+        # Convert <br> tags to newlines first so the parser can split by line,
+        # then reuse the shared HTML coercion for any other backslash escapes.
         normalized = HTML_LINE_BREAK_RE.sub('\n', label)
-        return re.sub(r'\\+l', '\n', normalized)
+        return re.sub(r"\\+[ln]", '\n', normalized)
 
     @staticmethod
     def _format_html_label(text: str) -> str:
-        """Format label text as escaped HTML with <br> line breaks."""
-        normalized = text.replace('\r\n', '\n').replace('\r', '\n')
-        return Diagram._escape_xml(normalized.replace('\n', '<br>'))
+        """Format label text as escaped HTML with <br> line breaks.
+
+        Input may be plain text (``\\n``) or already HTML (``<br>``); both are
+        coerced into HTML-style (``<br>``) and then XML-escaped for embedding
+        in Draw.io attribute values.
+        """
+        return Diagram._escape_xml(coerce_html_label(text))
 
     @staticmethod
     def _html_to_plain_text(text: str) -> str:

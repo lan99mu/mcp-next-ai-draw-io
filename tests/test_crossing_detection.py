@@ -173,14 +173,20 @@ def test_shared_endpoints_are_not_crossings():
 
 
 def test_connection_crossing_node_is_reported():
-    """A connection passing through an unrelated node should be reported."""
+    """A connection passing through an unrelated node should be reported.
+
+    ``auto_route`` is disabled so the straight line really does cross the
+    obstacle — the detection logic itself is what is being verified here.
+    """
     diagram = Diagram(name="Node Crossing Test")
 
     source = diagram.add_shape('A', x=0, y=0, width=80, height=60)
     target = diagram.add_shape('B', x=320, y=0, width=80, height=60)
     obstacle = diagram.add_shape('Obstacle', x=160, y=-20, width=80, height=100)
 
-    diagram.add_connection(source, target, label="A-to-B", edge_style="straight")
+    diagram.add_connection(
+        source, target, label="A-to-B", edge_style="straight", auto_route=False
+    )
 
     cells = get_cells_from_xml(diagram.to_drawio_xml())
     crossings = detect_crossings(cells)
@@ -188,6 +194,34 @@ def test_connection_crossing_node_is_reported():
 
     assert len(node_crossings) == 1
     assert node_crossings[0]["connection2_label"] == "Obstacle"
+
+
+def test_auto_route_avoids_intervening_node():
+    """With ``auto_route=True`` (default) the connection detours around obstacles."""
+    diagram = Diagram(name="Auto Route Test")
+
+    source = diagram.add_shape('A', x=0, y=0, width=80, height=60)
+    target = diagram.add_shape('B', x=320, y=0, width=80, height=60)
+    diagram.add_shape('Obstacle', x=160, y=-20, width=80, height=100)
+
+    conn_id = diagram.add_connection(source, target, label="A-to-B", edge_style="straight")
+    assert diagram.connections[conn_id].waypoints, "Expected auto-routed waypoints"
+
+    cells = get_cells_from_xml(diagram.to_drawio_xml())
+    crossings = detect_crossings(cells)
+    node_crossings = [c for c in crossings if c.get("issue_type") == "node_crossing"]
+    assert node_crossings == [], "Auto-routed connection should not cross the obstacle"
+
+
+def test_auto_route_noop_when_no_obstacle():
+    """Connections with a clear path should not gain spurious waypoints."""
+    diagram = Diagram(name="Clear Path")
+
+    source = diagram.add_shape('A', x=0, y=0, width=80, height=60)
+    target = diagram.add_shape('B', x=300, y=0, width=80, height=60)
+
+    conn_id = diagram.add_connection(source, target, label="A-to-B")
+    assert diagram.connections[conn_id].waypoints == []
 
 
 if __name__ == "__main__":
