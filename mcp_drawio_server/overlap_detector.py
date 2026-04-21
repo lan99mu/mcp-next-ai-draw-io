@@ -13,6 +13,7 @@ Both results include actionable suggestions so the AI model can fix the layout.
 
 from __future__ import annotations
 
+import re
 from typing import Optional
 
 
@@ -251,7 +252,6 @@ _LABEL_MIN_HALF_H = 8.0
 
 
 def _strip_html(text: str) -> str:
-    import re
     # Convert <br> and block breaks to newlines, then drop remaining tags.
     t = re.sub(r"<br\s*/?>", "\n", text, flags=re.IGNORECASE)
     t = re.sub(r"</(div|p|li|tr|h[1-6])>", "\n", t, flags=re.IGNORECASE)
@@ -442,7 +442,6 @@ def _label(cell: dict) -> str:
     """Return a human-readable label for a cell."""
     raw = (cell.get("value") or "").strip()
     # Strip HTML tags for display
-    import re
     plain = re.sub(r"<[^>]+>", "", raw).strip()
     return plain or cell.get("id", "(unknown)")
 

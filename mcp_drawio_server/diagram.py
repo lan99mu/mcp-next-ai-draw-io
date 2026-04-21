@@ -783,7 +783,10 @@ class Diagram:
                 (right_dx, 0.0),
             ])
 
-        def overlap_area(r1, r2) -> float:
+        def overlap_area(
+            r1: tuple[float, float, float, float],
+            r2: tuple[float, float, float, float],
+        ) -> float:
             ox1 = max(r1[0], r2[0])
             oy1 = max(r1[1], r2[1])
             ox2 = min(r1[0] + r1[2], r2[0] + r2[2])
@@ -791,6 +794,12 @@ class Diagram:
             return max(0.0, ox2 - ox1) * max(0.0, oy2 - oy1)
 
         def score(candidate: tuple[float, float]) -> tuple[float, float]:
+            """Rank candidate offsets: lower is better.
+
+            Primary: total residual overlap area after the shift (zero means
+            fully clear). Secondary: displacement magnitude (prefer the
+            smallest nudge that still clears every obstacle).
+            """
             dx, dy = candidate
             shifted = (
                 label_rect[0] + dx,
@@ -798,8 +807,7 @@ class Diagram:
                 label_rect[2],
                 label_rect[3],
             )
-            # Primary: total overlap area after shift (zero = fully clear).
-            # Secondary: displacement magnitude (prefer the smallest nudge).
+            # Primary score term: total overlap area after shift (zero = fully clear).
             residual = sum(overlap_area(shifted, obs) for obs in obstacles)
             # Include the union of node rects and other edge labels that were
             # not originally conflicting, so the chosen offset does not sail
