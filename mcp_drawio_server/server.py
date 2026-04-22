@@ -38,9 +38,11 @@ SERVER_INSTRUCTIONS = (
     "Draw.io diagram server. Workflow: "
     "1) Use batch_operations to add all shapes+connections in one call instead of individual add_shape/add_connection calls — this is the preferred approach and saves significant tokens. "
     "2) Use create_diagram(autosave_path=...) or load_diagram(autosave=true) to enable autosave so changes appear on disk immediately without a separate save_diagram call. "
-    "3) Call list_cells/get_cell only when you need to retrieve IDs or inspect existing elements. "
-    "4) Call save_diagram explicitly only when autosave is off. "
-    "5) For detailed docs on shapes, bindings, or workflows, read the docs:// resources instead of asking questions."
+    "3) Call list_cells/get_cell only when you need to retrieve IDs or inspect existing elements (get_cell returns bound_nodes — no separate query tool). "
+    "4) detect_overlaps, detect_line_crossings, and suggest_bindings now return a structured `fix` field per issue — execute it verbatim via batch_operations (it supports bind_nodes/unbind_nodes/move_shape/update_cell). "
+    "5) To resolve overlaps in bulk, call auto_layout_adjust; it respects binding groups and container hierarchy. "
+    "6) Call save_diagram explicitly only when autosave is off. "
+    "7) For detailed docs on shapes, bindings, or workflows, read the docs:// resources instead of asking questions."
 )
 
 # Initialize MCP server

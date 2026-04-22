@@ -5,6 +5,7 @@ Analysis operation handlers.
 Handlers for detect_line_crossings and suggest_bindings tools.
 """
 
+import json
 from typing import Any
 from mcp.types import TextContent
 
@@ -12,6 +13,16 @@ from .state import diagram_state, safe_float
 from ..xml_operations import get_cells_from_xml
 from ..crossing_detector import detect_crossings
 from ..overlap_detector import detect_overlaps
+
+
+def _format_fix(fix: dict | None) -> str:
+    """Return a compact one-line JSON representation of a structured fix."""
+    if not fix:
+        return ""
+    try:
+        return json.dumps(fix, ensure_ascii=False, sort_keys=False)
+    except (TypeError, ValueError):
+        return str(fix)
 
 
 def handle_detect_line_crossings(arguments: Any) -> list[TextContent]:
@@ -51,6 +62,9 @@ def handle_detect_line_crossings(arguments: Any) -> list[TextContent]:
                 ix, iy = crossing["intersection_point"]
                 result_parts.append(f"   - Intersection point: ({ix:.1f}, {iy:.1f})")
         result_parts.append(f"   {crossing['suggestion']}")
+        fix_json = _format_fix(crossing.get("fix"))
+        if fix_json:
+            result_parts.append(f"   → Fix: {fix_json}")
     
     return [TextContent(type="text", text="\n".join(result_parts))]
 
@@ -165,7 +179,17 @@ def handle_suggest_bindings(arguments: Any) -> list[TextContent]:
                         'label2': label2,
                         'score': score,
                         'reasons': reasons,
-                        'distance': distance
+                        'distance': distance,
+                        # Structured fix descriptor (Requirement 2): callers
+                        # can execute this verbatim via `batch_operations`.
+                        'fix': {
+                            'op': 'bind_nodes',
+                            'args': {'node_ids': [shape1_id, shape2_id]},
+                            'rationale': (
+                                f"Bind '{label1}' and '{label2}' "
+                                f"(score={score}): {', '.join(reasons)}."
+                            ),
+                        },
                     })
     
     suggestions.sort(key=lambda x: x['score'], reverse=True)
@@ -194,9 +218,9 @@ def handle_suggest_bindings(arguments: Any) -> list[TextContent]:
             )
             result_parts.append(f"   Score: {suggestion['score']}/100")
             result_parts.append(f"   Reasons: {', '.join(suggestion['reasons'])}")
-            result_parts.append(
-                f"   → To bind: bind_nodes(node_ids=['{suggestion['id1']}', '{suggestion['id2']}'])"
-            )
+            fix_json = _format_fix(suggestion.get('fix'))
+            if fix_json:
+                result_parts.append(f"   → Fix: {fix_json}")
             result_parts.append("")
         
         if len(suggestions) > 10:
@@ -241,34 +265,27 @@ def handle_detect_overlaps(arguments: Any) -> list[TextContent]:
     if node_overlaps:
         result_parts.append(f"── Node–Node Overlaps ({len(node_overlaps)}) ──")
         for i, item in enumerate(node_overlaps, 1):
-            result_parts.append(f"\n{i}. {item['suggestion']}")
-            result_parts.append(
-                f"   → Fix: move_shape(shape_id='{item['shape2_id']}', new_x=..., new_y=...)"
-            )
+            cause = item.get("cause", "body")
+            result_parts.append(f"\n{i}. [{cause}] {item['suggestion']}")
+            fix_json = _format_fix(item.get("fix"))
+            if fix_json:
+                result_parts.append(f"   → Fix: {fix_json}")
 
     if out_of_container:
         result_parts.append(f"\n── Out-of-Container Violations ({len(out_of_container)}) ──")
         for i, item in enumerate(out_of_container, 1):
             result_parts.append(f"\n{i}. {item['suggestion']}")
-            result_parts.append(
-                f"   → Fix: move_shape or update_cell to reposition '{item['shape_id']}' "
-                f"inside '{item['container_id']}'"
-            )
+            fix_json = _format_fix(item.get("fix"))
+            if fix_json:
+                result_parts.append(f"   → Fix: {fix_json}")
 
     if label_overlaps:
         result_parts.append(f"\n── Label Overlaps ({len(label_overlaps)}) ──")
         for i, item in enumerate(label_overlaps, 1):
             result_parts.append(f"\n{i}. {item['suggestion']}")
-            if item.get("issue_type") == "edge_label_over_node":
-                result_parts.append(
-                    f"   → Fix: update_cell(cell_id='{item['edge_id']}', ...) "
-                    "with adjusted label offset, or add_connection(... label_offset_x=, label_offset_y=)"
-                )
-            else:
-                result_parts.append(
-                    f"   → Fix: set distinct label_offset_x/label_offset_y on "
-                    f"'{item['edge_id']}' or '{item['other_edge_id']}'."
-                )
+            fix_json = _format_fix(item.get("fix"))
+            if fix_json:
+                result_parts.append(f"   → Fix: {fix_json}")
 
     result_parts.append(
         "\n✨ TIP: Fix overlaps before adding connections to avoid crossing lines."

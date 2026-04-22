@@ -26,15 +26,17 @@ def get_tools_overview_content() -> str:
 - **delete_cell** — Remove a cell. Required: `cell_id`.
 
 ## Binding & Layout
-- **bind_nodes** — Bind nodes to move as a group. Required: `node_ids` (≥2).
-- **unbind_nodes** — Remove nodes from binding. Required: `node_ids`.
-- **get_bound_nodes** — Query bindings. Required: `node_id`.
-- **move_shape** — Move a shape; bound nodes follow. Required: `shape_id`, `new_x`, `new_y`.
+Node binding operations are now available inside `batch_operations`:
+- **batch_operations** `{"op": "bind_nodes", "node_ids": [...]}` — Bind nodes to move as a group.
+- **batch_operations** `{"op": "unbind_nodes", "node_ids": [...]}` — Remove nodes from binding.
+- To query which nodes are bound, call `get_cell(cell_id=...)` and read the `bound_nodes` field.
+- **move_shape** — Move a single shape; bound nodes follow. Required: `shape_id`, `new_x`, `new_y`.
+- **auto_layout_adjust** — Iteratively resolve overlaps. Options: `padding`, `max_iterations`, `only_ids`, `dry_run`.
 
 ## Analysis
-- **detect_line_crossings** — Find crossing connections and get fix suggestions.
-- **detect_overlaps** — Find overlapping shapes (node–node) and shapes that escape their container, with actionable fix suggestions.
-- **suggest_bindings** — Get binding recommendations based on proximity and naming. Optional: `proximity_threshold`.
+- **detect_line_crossings** — Find crossing connections. Each issue carries a structured `fix` ready to execute via `batch_operations`.
+- **detect_overlaps** — Find overlapping shapes (node–node, label overflow, out-of-container) with per-issue `fix` descriptors.
+- **suggest_bindings** — Get binding recommendations with per-suggestion `fix`. Optional: `proximity_threshold`.
 """
 
 
@@ -46,25 +48,26 @@ def get_bindings_guide_content() -> str:
 Bindings group nodes so they move together. Moving one node in a group moves all others by the same offset.
 
 ## Workflow
-1. Create related shapes with `add_shape`
-2. Bind them immediately: `bind_nodes(node_ids=[id1, id2, id3])`
-3. Later, move the group by moving any ONE node: `move_shape(shape_id=id1, new_x=..., new_y=...)`
+1. Create related shapes with `add_shape` (or bundle into `batch_operations`).
+2. Bind them immediately via `batch_operations`:
+   `[{"op": "bind_nodes", "node_ids": [id1, id2, id3]}]`.
+3. Later, move the group by moving any ONE node: `move_shape(shape_id=id1, new_x=..., new_y=...)`.
 
 ## Checking Bindings
-- `list_cells()` shows `[BIND: explicit: id1, id2]` for bound nodes
-- `get_bound_nodes(node_id=...)` returns the binding list
+- `list_cells()` shows `[BIND: explicit: id1, id2]` for bound nodes.
+- `get_cell(cell_id=...)` returns a `bound_nodes` field — no separate query tool needed.
 
 ## Discovering Opportunities
-- `suggest_bindings(proximity_threshold=200)` scores node pairs by proximity, alignment, and naming patterns
-- Apply top suggestions with `bind_nodes`
+- `suggest_bindings(proximity_threshold=200)` scores node pairs by proximity, alignment, and naming patterns.
+- Each suggestion includes a structured `fix` (an `{op: "bind_nodes", args: …}` descriptor) — execute it verbatim via `batch_operations`.
 
 ## Common Patterns
-- **Layer binding**: All nodes at the same Y level
-- **Vertical stack**: Service + DB + Cache
-- **Incremental**: `bind_nodes([a, b])` then later `bind_nodes([a, c])` — all three join the same group
+- **Layer binding**: All nodes at the same Y level.
+- **Vertical stack**: Service + DB + Cache.
+- **Incremental**: `bind_nodes([a, b])` then later `bind_nodes([a, c])` — all three join the same group.
 
 ## Unbinding
-- `unbind_nodes(node_ids=[id])` removes specific nodes from their group
+- In a batch: `{"op": "unbind_nodes", "node_ids": [id]}` removes specific nodes from their group.
 """
 
 
@@ -92,13 +95,13 @@ Use the three MCP prompts in order:
 ## Common Workflows
 
 ### New Diagram
-`create_diagram` → `add_shape` (all nodes) → `bind_nodes` → `add_connection` → `save_diagram`
+`create_diagram` → `batch_operations` (add all shapes + bind groups + add connections) → `save_diagram`
 
 ### Modify Existing
-`load_diagram` → `list_cells` → `bind_nodes` (if needed) → `move_shape` / `update_cell` → `save_diagram`
+`load_diagram` → `list_cells` → `batch_operations` (update_cell / move_shape / bind_nodes as needed) → `save_diagram`
 
 ### Optimize Layout
-`detect_line_crossings` → `detect_overlaps` → `suggest_bindings` → `bind_nodes` → `move_shape` → verify
+`detect_overlaps` / `detect_line_crossings` / `suggest_bindings` → execute each issue's structured `fix` via `batch_operations`; for bulk overlap resolution call `auto_layout_adjust` once → verify
 """
 
 

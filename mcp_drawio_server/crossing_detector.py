@@ -262,6 +262,7 @@ def detect_crossings(cells: list[dict]) -> list[dict]:
         - connection2_label: Label of second connection
         - intersection_point: (x, y) coordinates where lines cross
         - suggestion: Text suggestion for how to fix the crossing
+        - fix: Structured operation descriptor (Requirement 2).
     """
     # Separate shapes and connections
     shapes = {cell['id']: cell for cell in cells if cell.get('vertex')}
@@ -302,7 +303,8 @@ def detect_crossings(cells: list[dict]) -> list[dict]:
                     'connection2_id': conn2['id'],
                     'connection2_label': conn2.get('value', '(no label)'),
                     'intersection_point': found_intersection,
-                    'suggestion': suggestion
+                    'suggestion': suggestion,
+                    'fix': _build_crossing_fix(conn1, found_intersection, shapes),
                 })
 
     # Detect connection segments crossing through unrelated node interiors
@@ -346,6 +348,7 @@ def detect_crossings(cells: list[dict]) -> list[dict]:
                     'connection2_label': shape_label,
                     'intersection_point': None,
                     'suggestion': suggestion,
+                    'fix': _build_node_crossing_fix(conn, rect, points),
                 })
     
     return crossings
@@ -411,3 +414,91 @@ def _generate_crossing_suggestion(
     )
     
     return "\n".join(suggestions)
+
+
+# ---------------------------------------------------------------------------
+# Structured fix builders (Requirement 2)
+# ---------------------------------------------------------------------------
+
+def _build_crossing_fix(
+    conn: dict,
+    intersection: tuple[float, float],
+    shapes: dict,
+    margin: float = 30.0,
+) -> dict:
+    """Build an update_cell fix that inserts a detour waypoint on ``conn``.
+
+    The strategy: place one waypoint offset from the intersection point,
+    perpendicular to the segment that's crossing. The offset picks the
+    shorter of vertical vs. horizontal detour so the route stays close to
+    the original. This is an orthogonal-friendly nudge that resolves most
+    two-edge crossings without disturbing the rest of the layout.
+    """
+    ix, iy = intersection
+    start, end = get_connection_endpoints(conn, shapes)
+    dx = end[0] - start[0]
+    dy = end[1] - start[1]
+    if abs(dx) >= abs(dy):
+        # Edge runs mostly horizontal → detour vertically.
+        waypoint = (ix, iy + margin)
+    else:
+        # Edge runs mostly vertical → detour horizontally.
+        waypoint = (ix + margin, iy)
+
+    # Preserve existing waypoints; insert the new one at the midpoint.
+    existing = list(conn.get("waypoints") or [])
+    new_waypoints: list[list[float]] = []
+    for wp in existing:
+        try:
+            new_waypoints.append([float(wp[0]), float(wp[1])])
+        except (TypeError, ValueError):
+            continue
+    new_waypoints.append([float(waypoint[0]), float(waypoint[1])])
+    return {
+        "op": "update_cell",
+        "args": {
+            "cell_id": conn["id"],
+            "waypoints": new_waypoints,
+        },
+        "rationale": (
+            f"Insert a detour waypoint at {waypoint} to route '{conn['id']}' "
+            "around the crossing."
+        ),
+    }
+
+
+def _build_node_crossing_fix(
+    conn: dict,
+    rect: tuple[float, float, float, float],
+    points: list[tuple[float, float]],
+) -> dict:
+    """Build a waypoints fix that routes the edge around a blocking node.
+
+    Picks two waypoints that send the line above or below (whichever is
+    closer to the current path) the blocking rectangle.
+    """
+    rx, ry, rw, rh = rect
+    if not points or len(points) < 2:
+        waypoints = [[rx + rw + 20.0, ry - 20.0]]
+    else:
+        sx, sy = points[0]
+        tx, ty = points[-1]
+        # Compare the blocking node's centre y against the edge's midpoint y.
+        mid_y = (sy + ty) / 2.0
+        node_center_y = ry + rh / 2.0
+        if mid_y <= node_center_y:
+            # Route above the blocker.
+            detour_y = ry - 20.0
+        else:
+            detour_y = ry + rh + 20.0
+        waypoints = [[sx, detour_y], [tx, detour_y]]
+    return {
+        "op": "update_cell",
+        "args": {
+            "cell_id": conn["id"],
+            "waypoints": waypoints,
+        },
+        "rationale": (
+            f"Route '{conn['id']}' around the blocking node via orthogonal waypoints."
+        ),
+    }

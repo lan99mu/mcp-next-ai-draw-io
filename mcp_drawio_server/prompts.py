@@ -178,11 +178,11 @@ PLAN:
 
 STEPS:
 1. **Create diagram**: `create_diagram()`
-2. **Add all shapes**: Call `add_shape(...)` for each node in the plan.
+2. **Add all shapes**: Call `add_shape(...)` for each node in the plan — or, preferably, bundle them into a single `batch_operations(operations=[{{"op": "add_shape", ...}}, ...])` call.
    - Use exact (x, y, width, height) from the plan
    - Record the returned shape IDs
-3. **Bind related groups**: Call `bind_nodes(node_ids=[...])` for each binding group
-4. **Add connections**: Call `add_connection(source_id=..., target_id=..., ...)` for each edge{save_step}
+3. **Bind related groups**: use `batch_operations` with `{{"op": "bind_nodes", "node_ids": [...]}}` for each binding group
+4. **Add connections**: Call `add_connection(source_id=..., target_id=..., ...)` for each edge — again, `batch_operations` is the preferred way for more than one edge{save_step}
 
 RULES:
 - Create ALL shapes before adding connections
@@ -214,9 +214,10 @@ STEPS:
 3. **Detect crossings**: `detect_line_crossings()` — find overlapping connections
 4. **Suggest bindings**: `suggest_bindings()` — discover ungrouped related nodes
 5. **Fix issues**:
-    - Bind suggested groups: `bind_nodes(node_ids=[...])`
-    - Move nodes to fix overlaps/crossings: `move_shape(...)` (bound nodes follow)
-    - Adjust waypoints or entry/exit points if connections overlap
+    - Each issue returned by `detect_overlaps` / `detect_line_crossings` / `suggest_bindings` carries a structured `fix` field — execute it verbatim via `batch_operations`.
+    - For bulk overlap resolution, call `auto_layout_adjust` once and let the server push shapes apart.
+    - Move nodes manually with `move_shape` only when finer control is needed (bound nodes follow).
+    - Adjust waypoints/anchors with `update_cell(cell_id=..., waypoints=[...], entry_x=..., exit_x=..., label_offset_x=..., label_offset_y=...)`.
 5. **Complex UML class diagram checklist**:
    - Nodes must be fully inside their domain containers
    - Domain containers must not overlap each other
@@ -227,10 +228,10 @@ STEPS:
 7. **Save**: `save_diagram(path=...)` when satisfied
 
 COMMON FIXES:
-- Overlapping shapes → `detect_overlaps()` → follow suggestions (move_shape or resize)
-- Crossed connections → add waypoints or adjust entry/exit points
-- Unbound related nodes → bind_nodes to group them
-- Nodes outside containers → move node or move container and re-check"""
+- Overlapping shapes → `auto_layout_adjust()` (bulk) or follow the structured `fix` returned by `detect_overlaps`
+- Crossed connections → apply the `fix` returned by `detect_line_crossings` (inserts waypoints via `update_cell`)
+- Unbound related nodes → apply the `fix` returned by `suggest_bindings` via `batch_operations`
+- Nodes outside containers → apply the `fix` returned by `detect_overlaps.out_of_container`"""
                     )
                 )
             ]

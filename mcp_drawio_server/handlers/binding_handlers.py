@@ -5,10 +5,12 @@ Node binding operation handlers.
 Handlers for bind_nodes, unbind_nodes, get_bound_nodes, and move_shape tools.
 """
 
+import json
 from typing import Any
 from mcp.types import TextContent
 
 from .state import diagram_state, bind_nodes_helper
+from ..auto_layout import adjust_layout
 
 
 def handle_bind_nodes(arguments: Any) -> list[TextContent]:
@@ -140,3 +142,66 @@ def handle_move_shape(arguments: Any) -> list[TextContent]:
             type="text",
             text=f"Moved '{shape_id}' to ({new_x}, {new_y}){autosave_note}"
         )]
+
+
+def handle_auto_layout_adjust(arguments: Any) -> list[TextContent]:
+    """Handle auto_layout_adjust tool call (Requirement 5).
+
+    Iteratively pushes overlapping shapes apart until no overlaps remain or
+    ``max_iterations`` is reached. Binding groups move as a unit and
+    container children stay inside their container.
+    """
+    diagram = diagram_state.get_or_create_diagram()
+
+    padding = float(arguments.get("padding", 10.0))
+    max_iterations = int(arguments.get("max_iterations", 20))
+    only_ids = arguments.get("only_ids")
+    dry_run = bool(arguments.get("dry_run", False))
+
+    if only_ids:
+        missing = [sid for sid in only_ids if sid not in diagram.shapes]
+        if missing:
+            return [TextContent(
+                type="text",
+                text=f"Error: the following shape IDs were not found: {', '.join(missing)}"
+            )]
+
+    if not diagram.shapes:
+        return [TextContent(
+            type="text",
+            text="No shapes to adjust. Create a diagram first."
+        )]
+
+    result = adjust_layout(
+        diagram,
+        padding=padding,
+        max_iterations=max_iterations,
+        only_ids=only_ids,
+        dry_run=dry_run,
+    )
+
+    # If we actually mutated the diagram, refresh any cached XML view.
+    if not dry_run and result["moves"] and diagram_state.current_xml:
+        diagram_state.current_xml = diagram.to_drawio_xml()
+    autosave_note = diagram_state.maybe_autosave() or "" if not dry_run else ""
+
+    prefix = "[dry-run] " if dry_run else ""
+    summary_parts = [
+        f"{prefix}auto_layout_adjust: {len(result['moves'])} shape(s) moved "
+        f"in {result['iterations']} iteration(s); "
+        f"{len(result['remaining_overlaps'])} overlap(s) remaining."
+    ]
+    if result["moves"]:
+        summary_parts.append(
+            "Moves: " + json.dumps(result["moves"], ensure_ascii=False)
+        )
+    if result["remaining_overlaps"]:
+        summary_parts.append(
+            "Remaining overlaps: " + json.dumps(
+                result["remaining_overlaps"], ensure_ascii=False
+            )
+        )
+    return [TextContent(
+        type="text",
+        text="\n".join(summary_parts) + autosave_note,
+    )]

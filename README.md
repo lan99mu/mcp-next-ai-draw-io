@@ -49,7 +49,7 @@ pip install -r requirements.txt
 |----------|-------|
 | New diagram | `create_diagram` → `add_shape` → `add_connection` → `save_diagram` |
 | Edit existing | `load_diagram` → `list_cells` → `update_cell` / `delete_cell` → `save_diagram` |
-| Layout tuning | `list_cells` → `bind_nodes` → `move_shape` → `detect_line_crossings` |
+| Layout tuning | `list_cells` → `batch_operations` (`bind_nodes` + `move_shape`) → `auto_layout_adjust` → `detect_line_crossings` |
 
 ## Tool Reference
 
@@ -79,14 +79,15 @@ pip install -r requirements.txt
 
 ### Binding & Layout
 
+Node binding (`bind_nodes` / `unbind_nodes`) is available as operations inside `batch_operations`. To query which nodes are bound to a given node, use `get_cell` — its response includes the `bound_nodes` field. Prefer `auto_layout_adjust` over manual `move_shape` loops when cleaning up overlapping diagrams.
+
 | Tool | Description |
 |------|-------------|
-| `bind_nodes` | Bind nodes so they move together as a group |
-| `unbind_nodes` | Remove nodes from a binding group |
-| `get_bound_nodes` | Query which nodes are bound to a given node |
-| `move_shape` | Move a shape (bound nodes follow automatically) |
-| `suggest_bindings` | Get intelligent binding suggestions based on proximity and naming |
-| `detect_line_crossings` | Detect crossing connections and get fix suggestions |
+| `move_shape` | Move a single shape (bound nodes follow automatically) |
+| `auto_layout_adjust` | Iteratively push overlapping shapes apart; binding groups move as a unit |
+| `suggest_bindings` | Get intelligent binding suggestions with structured `fix` descriptors |
+| `detect_line_crossings` | Detect crossing connections, with a structured `fix` per crossing |
+| `detect_overlaps` | Detect node overlaps and out-of-container violations, with `fix` per issue |
 
 ### MCP Prompts (Progressive Guidance)
 
