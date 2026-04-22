@@ -408,6 +408,50 @@ class Diagram:
             parent_id = p.parent_id
         return (x, y, float(s.width), float(s.height))
 
+    def _ancestors(self, shape_id: Optional[str]) -> list[str]:
+        """Return [shape_id, parent, grandparent, ..., "1"] for the parent chain."""
+        if not shape_id:
+            return ["1"]
+        chain: list[str] = [shape_id]
+        seen: set[str] = {shape_id}
+        current = self.shapes.get(shape_id)
+        while current is not None and current.parent_id and current.parent_id not in seen:
+            seen.add(current.parent_id)
+            chain.append(current.parent_id)
+            current = self.shapes.get(current.parent_id)
+        if chain[-1] != "1":
+            chain.append("1")
+        return chain
+
+    def _edge_parent_id(
+        self,
+        source_id: Optional[str],
+        target_id: Optional[str],
+    ) -> str:
+        """Return the LCA (lowest-common-ancestor) parent ID for an edge.
+
+        Draw.io expects an edge to live at or above the level of both its
+        endpoints in the parent tree. Hoisting it to the LCA prevents weird
+        z-order / grouping bugs when endpoints are nested inside different
+        swimlanes or containers. Falls back to ``"1"`` (the graph root) when
+        either endpoint is missing.
+        """
+        if not source_id or not target_id:
+            return "1"
+        if source_id not in self.shapes or target_id not in self.shapes:
+            return "1"
+        src_chain = self._ancestors(source_id)
+        tgt_set = set(self._ancestors(target_id))
+        for ancestor in src_chain:
+            if ancestor in tgt_set:
+                # Never put the edge inside one of its own endpoints; hoist
+                # one level further so the edge isn't a child of a vertex
+                # it connects to.
+                if ancestor == source_id or ancestor == target_id:
+                    continue
+                return ancestor
+        return "1"
+
     @staticmethod
     def _segment_intersects_rect(
         p1: tuple[float, float],
@@ -900,8 +944,26 @@ class Diagram:
         Returns:
             The ID of the created connection
         """
-        if source_id not in self.shapes or target_id not in self.shapes:
-            raise ValueError("Source or target shape not found")
+        # Req 3: allow either endpoint to be free-floating by supplying an
+        # explicit source_point / target_point. Previously both IDs were
+        # mandatory, which forced callers to invent placeholder shapes.
+        missing_source = bool(source_id) and source_id not in self.shapes
+        missing_target = bool(target_id) and target_id not in self.shapes
+        if missing_source or missing_target:
+            # Non-empty IDs must match a real shape. This catches typos and
+            # stale references from the AI.
+            missing = [x for x, m in ((source_id, missing_source), (target_id, missing_target)) if m]
+            raise ValueError(
+                f"Source or target shape not found: {', '.join(missing)}"
+            )
+        if not source_id and source_point is None:
+            raise ValueError(
+                "Either source_id or source_point must be provided for a connection"
+            )
+        if not target_id and target_point is None:
+            raise ValueError(
+                "Either target_id or target_point must be provided for a connection"
+            )
             
         conn_id = f"conn_{self.next_id}"
         self.next_id += 1
@@ -912,6 +974,8 @@ class Diagram:
             and not effective_waypoints
             and source_point is None
             and target_point is None
+            and source_id in self.shapes
+            and target_id in self.shapes
             and edge_style in ("orthogonal", "straight", "curved")
         ):
             effective_waypoints = self._compute_auto_waypoints(source_id, target_id)
@@ -927,6 +991,8 @@ class Diagram:
             and label_offset_y is None
             and source_point is None
             and target_point is None
+            and source_id in self.shapes
+            and target_id in self.shapes
         ):
             anchor = self._edge_label_anchor(
                 source_id, target_id, effective_waypoints
@@ -1038,10 +1104,30 @@ class Diagram:
         # Add connections
         for conn in self.connections.values():
             style = self._build_connection_style(conn)
-            
+
+            # Req 3: conditionally include source/target attributes. Emitting
+            # `source=""` / `target=""` would cause drawio to try to resolve
+            # those IDs and silently drop the edge binding when it can't.
+            endpoint_parts: list[str] = []
+            has_source = bool(conn.source_id) and conn.source_id in self.shapes
+            has_target = bool(conn.target_id) and conn.target_id in self.shapes
+            if has_source:
+                endpoint_parts.append(f'source="{conn.source_id}"')
+            if has_target:
+                endpoint_parts.append(f'target="{conn.target_id}"')
+
+            # Pick edge parent = LCA of the two endpoints in the parent tree.
+            # Falling back to "1" when either endpoint is free-floating keeps
+            # behaviour backwards-compatible for existing diagrams.
+            edge_parent = self._edge_parent_id(
+                conn.source_id if has_source else None,
+                conn.target_id if has_target else None,
+            )
+
+            endpoint_attr = (" " + " ".join(endpoint_parts)) if endpoint_parts else ""
             xml_parts.append(
                 f'        <mxCell id="{conn.id}" value="{self._format_html_label(conn.label)}" '
-                f'style="{style}" edge="1" parent="1" source="{conn.source_id}" target="{conn.target_id}">'
+                f'style="{style}" edge="1" parent="{edge_parent}"{endpoint_attr}>'
             )
             
             # Build geometry with entry/exit points, waypoints, and offsets
