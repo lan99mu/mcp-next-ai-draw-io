@@ -91,7 +91,7 @@ def get_tool_definitions() -> list[Tool]:
         # --- Shape Operations ---
         Tool(
             name="add_shape",
-            description="Add a shape to the diagram. Returns the new shape ID.",
+            description="Add a single shape to the diagram. Returns the new shape ID. For creating many shapes at once, prefer `batch_operations` to save tokens and round-trips.",
             inputSchema={
                 "type": "object",
                 "properties": {
@@ -207,7 +207,7 @@ def get_tool_definitions() -> list[Tool]:
         # --- Connection Operations ---
         Tool(
             name="add_connection",
-            description="Add a connection between two shapes. Returns the new connection ID.",
+            description="Add a single connection between two shapes. Returns the new connection ID. For creating many edges at once, prefer `batch_operations` to save tokens and round-trips.",
             inputSchema={
                 "type": "object",
                 "properties": {
@@ -356,7 +356,7 @@ def get_tool_definitions() -> list[Tool]:
         # --- Cell Modification ---
         Tool(
             name="update_cell",
-            description="Update properties of an existing cell. Only specified fields are changed.",
+            description="Update properties of an existing cell. Only specified fields are changed. For edges, you can also update routing (waypoints, entry_x/y, exit_x/y) and label offsets. For bulk updates, prefer `batch_operations`.",
             inputSchema={
                 "type": "object",
                 "properties": {
@@ -389,6 +389,40 @@ def get_tool_definitions() -> list[Tool]:
                     "style": {
                         "type": "string",
                         "description": "New Draw.io style string"
+                    },
+                    "entry_x": {
+                        "type": "number",
+                        "description": "(Edge) Entry-anchor X on the target shape (0.0–1.0)."
+                    },
+                    "entry_y": {
+                        "type": "number",
+                        "description": "(Edge) Entry-anchor Y on the target shape (0.0–1.0)."
+                    },
+                    "exit_x": {
+                        "type": "number",
+                        "description": "(Edge) Exit-anchor X on the source shape (0.0–1.0)."
+                    },
+                    "exit_y": {
+                        "type": "number",
+                        "description": "(Edge) Exit-anchor Y on the source shape (0.0–1.0)."
+                    },
+                    "waypoints": {
+                        "type": "array",
+                        "description": "(Edge) Replace the edge's waypoints. Array of [x, y] points in absolute canvas coordinates.",
+                        "items": {
+                            "type": "array",
+                            "items": {"type": "number"},
+                            "minItems": 2,
+                            "maxItems": 2
+                        }
+                    },
+                    "label_offset_x": {
+                        "type": "number",
+                        "description": "(Edge) X offset of the label relative to its natural anchor."
+                    },
+                    "label_offset_y": {
+                        "type": "number",
+                        "description": "(Edge) Y offset of the label relative to its natural anchor."
                     }
                 },
                 "required": ["cell_id"]
@@ -396,7 +430,7 @@ def get_tool_definitions() -> list[Tool]:
         ),
         Tool(
             name="delete_cell",
-            description="Delete a cell (shape or connection) by ID.",
+            description="Delete a cell (shape or connection) by ID. For bulk deletion, prefer `batch_operations`.",
             inputSchema={
                 "type": "object",
                 "properties": {
@@ -410,55 +444,13 @@ def get_tool_definitions() -> list[Tool]:
         ),
 
         # --- Binding & Layout ---
-        Tool(
-            name="bind_nodes",
-            description="Bind nodes into a group so they move together.",
-            inputSchema={
-                "type": "object",
-                "properties": {
-                    "node_ids": {
-                        "type": "array",
-                        "items": {"type": "string"},
-                        "minItems": 2,
-                        "description": "List of node IDs to bind (minimum 2)"
-                    }
-                },
-                "required": ["node_ids"]
-            }
-        ),
-        Tool(
-            name="unbind_nodes",
-            description="Remove nodes from their binding group.",
-            inputSchema={
-                "type": "object",
-                "properties": {
-                    "node_ids": {
-                        "type": "array",
-                        "items": {"type": "string"},
-                        "minItems": 1,
-                        "description": "List of node IDs to unbind"
-                    }
-                },
-                "required": ["node_ids"]
-            }
-        ),
-        Tool(
-            name="get_bound_nodes",
-            description="Query which nodes are bound to a given node.",
-            inputSchema={
-                "type": "object",
-                "properties": {
-                    "node_id": {
-                        "type": "string",
-                        "description": "Node ID to query"
-                    }
-                },
-                "required": ["node_id"]
-            }
-        ),
+        # Note: `bind_nodes` / `unbind_nodes` are no longer exposed as standalone
+        # tools — they remain available as operations inside `batch_operations`.
+        # To query which nodes are bound to a given node, use `get_cell`, which
+        # returns the `bound_nodes` field directly.
         Tool(
             name="move_shape",
-            description="Move a shape to a new position. All bound nodes move automatically by the same offset.",
+            description="Move a single shape to a new position. All bound nodes move automatically by the same offset. For moving many shapes, prefer `batch_operations`; to resolve layout overlaps automatically, prefer `auto_layout_adjust`.",
             inputSchema={
                 "type": "object",
                 "properties": {
@@ -476,6 +468,43 @@ def get_tool_definitions() -> list[Tool]:
                     }
                 },
                 "required": ["shape_id", "new_x", "new_y"]
+            }
+        ),
+        Tool(
+            name="auto_layout_adjust",
+            description=(
+                "Iteratively push overlapping shapes apart until the diagram has no "
+                "overlaps. Binding groups move as a unit and container children stay "
+                "inside their container. Ideal as a final cleanup step after "
+                "`draw_diagram` or whenever `detect_overlaps` reports issues."
+            ),
+            inputSchema={
+                "type": "object",
+                "properties": {
+                    "padding": {
+                        "type": "number",
+                        "description": "Gap to leave between shapes after separating them (px).",
+                        "default": 10,
+                        "minimum": 0,
+                    },
+                    "max_iterations": {
+                        "type": "integer",
+                        "description": "Maximum passes. Most diagrams settle within 5–10.",
+                        "default": 20,
+                        "minimum": 1,
+                        "maximum": 200,
+                    },
+                    "only_ids": {
+                        "type": "array",
+                        "items": {"type": "string"},
+                        "description": "Optional: restrict movement to these shape IDs.",
+                    },
+                    "dry_run": {
+                        "type": "boolean",
+                        "description": "If true, compute moves but do not apply them.",
+                        "default": False,
+                    }
+                }
             }
         ),
 
@@ -516,7 +545,10 @@ def get_tool_definitions() -> list[Tool]:
         # --- Batch Operations ---
         Tool(
             name="batch_operations",
-            description="Execute multiple diagram operations in one call to reduce token usage.",
+            description=(
+                "Execute multiple diagram operations in one call to reduce token usage. "
+                "Prefer this over single-op tools when adding/modifying more than one shape or edge at a time."
+            ),
             inputSchema={
                 "type": "object",
                 "properties": {
@@ -526,7 +558,7 @@ def get_tool_definitions() -> list[Tool]:
                             "Ordered list of operations. Each item is an object with an 'op' key "
                             "plus the parameters of that operation. "
                             "Supported ops: add_shape, add_connection, bind_nodes, unbind_nodes, "
-                            "move_shape, update_cell, delete_cell."
+                            "move_shape, update_cell, delete_cell, auto_layout_adjust."
                         ),
                         "items": {
                             "type": "object",
@@ -536,7 +568,8 @@ def get_tool_definitions() -> list[Tool]:
                                     "enum": [
                                         "add_shape", "add_connection",
                                         "bind_nodes", "unbind_nodes",
-                                        "move_shape", "update_cell", "delete_cell"
+                                        "move_shape", "update_cell", "delete_cell",
+                                        "auto_layout_adjust",
                                     ],
                                     "description": "Operation name"
                                 }

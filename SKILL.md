@@ -97,27 +97,49 @@ user-invocable: true
 
 ## 5. 本项目工具映射（必须优先使用）
 
-文件与检查：
-- `load_diagram(path=...)` / `create_diagram(name=...)` / `save_diagram(path=...)`
-- `list_cells()` 查看全部元素与绑定关系；`get_cell(cell_id=...)` 查看单个细节
+> **写操作一律走 `batch_operations`**：多个节点 / 连线 / 绑定 / 更新 / 删除等写类操作应当**打包进一次 `batch_operations` 调用**，以节省往返与 token。`add_shape` / `add_connection` / `update_cell` / `delete_cell` / `move_shape` 仅用于真正的单步操作。
 
-新增与修改：
-- `add_shape(...)` 新增节点/容器
-- `add_connection(...)` 新增连线，**必须填写 HTML 风格的 `label`**；默认 `auto_route=true`，会自动避开中间节点
-- `update_cell(...)` / `delete_cell(cell_id=...)`
+文件与会话：
+- `load_diagram(path=...)` / `create_diagram(name=...)` / `save_diagram(path=...)`
+- 建议 `create_diagram(autosave_path=...)` 或 `load_diagram(autosave=true)` 开启自动保存，省掉显式 `save_diagram`
+
+查询（只读）：
+- `list_cells()` 查看全部元素与绑定关系
+- `get_cell(cell_id=...)` 查看单个元素细节，**返回值自带 `bound_nodes` 字段**（因此无独立的 `get_bound_nodes` 工具）
+
+批量写入（首选）：
+- `batch_operations(operations=[...])` — 支持的 `op`：
+  - `add_shape` / `add_connection` — 新增
+  - `update_cell` — 更新 label / 位置 / 尺寸 / 样式，**还支持 `waypoints` / `entry_x/y` / `exit_x/y` / `label_offset_x/y`**
+  - `delete_cell` — 删除
+  - `move_shape` — 移动（绑定节点自动跟随）
+  - `bind_nodes` / `unbind_nodes` — 绑定 / 解绑（**仅在 batch 内可用**）
+  - `auto_layout_adjust` — 触发自动布局调整
+
+单步便捷工具（只有一个写操作时用）：
+- `add_shape(...)` / `add_connection(...)` —— **必须填写 HTML 风格的 `label`**；默认 `auto_route=true`
+- `update_cell(...)` / `delete_cell(...)` / `move_shape(...)`
 
 布局与局部调整：
-- `bind_nodes(node_ids=[...])`、`move_shape(shape_id=..., new_x=..., new_y=...)`、`suggest_bindings()`
+- `auto_layout_adjust(padding=10, max_iterations=20, only_ids=None, dry_run=false)` — **服务端迭代推开**所有重叠，绑定组整体移动、不越出容器、自动路由边自动重算。推荐作为收尾一步
+- `suggest_bindings()` — 返回结构化绑定建议
 
-验收检查：
-- `detect_line_crossings()` 检测连线交叉 + 连线穿过节点（`issue_type=node_crossing`）
-- `detect_overlaps()` 检测节点重叠与越界
+验收检查（只读）：
+- `detect_line_crossings()` — 检测连线交叉 + 连线穿过节点（`issue_type=node_crossing`）
+- `detect_overlaps()` — 检测节点重叠、label 溢出、容器越界
+- 以上三个检查工具（含 `suggest_bindings`）返回的**每一条 issue 都附带 `fix` 字段**，形如：
+  ```json
+  { "op": "move_shape", "args": {"shape_id": "s2", "new_x": 240, "new_y": 160},
+    "rationale": "向右移动以消除与 s1 的重叠" }
+  ```
+  直接把多个 `fix` 喂进 `batch_operations` 即可落地。
 
 工具使用原则：
 1. **先读后改**：`load_diagram` → `list_cells` / `get_cell` → 再改
-2. **成组即绑定**：新增一组相关节点后立即 `bind_nodes`
-3. **优先局部移动**：移动绑定组里的任一节点带动整组，避免逐个改坐标
-4. **每次改动后验收**：`detect_line_crossings` + `detect_overlaps` + `list_cells`
+2. **批量优先**：写操作一律组装进 `batch_operations`；真正只改一处才用单步工具
+3. **成组即绑定**：新增一组相关节点后立即在同一个 batch 里加 `{"op": "bind_nodes", "node_ids": [...]}`
+4. **收尾跑自动布局**：批量新增 / 迁移后用 `auto_layout_adjust` 一次性推开重叠
+5. **验收闭环**：`detect_line_crossings` + `detect_overlaps` → 把返回的 `fix` 直接塞进下一次 `batch_operations`
 
 ---
 
@@ -129,13 +151,19 @@ user-invocable: true
 - 新图：先确认目录和文件名，再 `create_diagram`
 
 步骤：
-1. **加载或创建**：`load_diagram` / `create_diagram`
-2. **扫描现状**：`list_cells`，关键节点/连线用 `get_cell`
-3. **新增/调整节点**：按语义选形状，同类节点尺寸统一
-4. **新增/调整连线**：带 HTML label；协议、事件名、topic、接口路径写进 label；依赖 `auto_route=true` 避开节点；必要时手动补 `waypoints`
-5. **绑定局部组**：服务 + DB、服务 + 缓存、容器内同层节点；`suggest_bindings()` 补查遗漏
-6. **布局验收**：`detect_line_crossings()` + `detect_overlaps()` → 必要时 `move_shape()` 微调
-7. **保存**：`save_diagram(path=...)`
+1. **加载或创建**：`load_diagram` / `create_diagram`（建议开 `autosave`）
+2. **扫描现状**：`list_cells`，关键节点 / 连线用 `get_cell`（包含 `bound_nodes` 字段）
+3. **批量新增 / 调整**：把所有 `add_shape` / `add_connection` / `update_cell` / `bind_nodes` 打包进**一次** `batch_operations`
+   - 按语义选形状，同类节点尺寸统一
+   - 连线必带 HTML label；协议、事件名、topic、接口路径写进 label
+   - 默认 `auto_route=true`；必要时在同一 batch 里 `update_cell(..., waypoints=[...], entry_x=..., exit_x=...)` 精调
+   - 相关节点同步用 `{"op": "bind_nodes", "node_ids": [...]}` 绑定
+4. **自动布局收尾**：`auto_layout_adjust()` 一次性推开所有重叠（绑定组整体移动、容器子节点不越界、自动路由边自动重算）
+5. **验收 & 循环修复**：
+   - `detect_line_crossings()` + `detect_overlaps()` + `suggest_bindings()`
+   - 把返回的每条 `fix` 直接收集成 `operations` 列表丢进下一次 `batch_operations`
+   - 再跑一次检查直到全部达标
+6. **保存**：若未开 autosave，调用 `save_diagram(path=...)`
 
 ---
 
@@ -153,14 +181,16 @@ user-invocable: true
 
 ## 8. 质量门禁（保存前必查）
 
-1. **连线穿过节点**：`detect_line_crossings()` 中 `issue_type=node_crossing` 必须为 0；如仍有，手动加 `waypoints` 或调 `entry/exit`
-2. **连线 label 遮挡节点**：`add_connection` 默认 `auto_avoid_label_overlap=true`；如仍遮挡，手动设置 `label_offset_x/label_offset_y`
+1. **连线穿过节点**：`detect_line_crossings()` 中 `issue_type=node_crossing` 必须为 0；如仍有，把返回的 `fix`（包含 `waypoints`）塞进 `batch_operations` 里的 `update_cell`
+2. **连线 label 遮挡节点 / 其他连线**：`detect_overlaps()` 返回的 label-overlap 条目附带 `fix`（`update_cell` + `label_offset_x/y`，已是**绝对偏移值**，直接用）
 3. **连线交叉数**：`detect_line_crossings()` 中 `issue_type=line_crossing` 尽量为 0
-4. **节点重叠 / 越界**：`detect_overlaps()` 必须为 0
+4. **节点重叠 / label 溢出 / 容器越界**：`detect_overlaps()` 必须为 0；
+   - **首选方案**：直接调 `auto_layout_adjust()` 让服务端推开
+   - **精细调整**：逐条应用 issue 的 `fix`（含 `cause` 字段区分 `body` vs `label_overflow`）
 5. **无 label 的连线数量**：0（除非显式豁免）
 6. **外部系统分组**：已通过容器 / 虚线边框 / `cloud` 视觉区隔
 7. **命名一致性**：同一概念无多种叫法
-8. **局部可维护性**：应一起移动的节点已 `bind_nodes`
+8. **局部可维护性**：应一起移动的节点已通过 `batch_operations` 里的 `bind_nodes` 绑定
 
 ---
 

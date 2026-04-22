@@ -344,9 +344,16 @@ def handle_update_cell(arguments: Any) -> list[TextContent]:
     if diagram_state.current_xml:
         try:
             updates = {}
-            for key in ['value', 'x', 'y', 'width', 'height', 'style']:
+            for key in (
+                'value', 'x', 'y', 'width', 'height', 'style',
+                'entry_x', 'entry_y', 'exit_x', 'exit_y',
+                'waypoints', 'label_offset_x', 'label_offset_y',
+            ):
                 if key in arguments:
                     updates[key] = arguments[key]
+            # Normalize waypoints: accept list[list/tuple] and convert to tuples
+            if 'waypoints' in updates and updates['waypoints'] is not None:
+                updates['waypoints'] = [tuple(wp) for wp in updates['waypoints']]
             
             diagram_state.current_xml = update_cell_in_xml(
                 diagram_state.current_xml, cell_id, **updates

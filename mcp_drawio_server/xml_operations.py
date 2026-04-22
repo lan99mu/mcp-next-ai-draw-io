@@ -164,10 +164,18 @@ def get_cells_from_xml(xml_content: str) -> list[dict]:
 
 
 def update_cell_in_xml(xml_content: str, cell_id: str, **updates) -> str:
-    """Update a cell in the XML by ID"""
+    """Update a cell in the XML by ID.
+
+    Supports the following keys:
+      value, style                         — attributes on <mxCell>
+      x, y, width, height                  — attributes on <mxGeometry>
+      entry_x, entry_y, exit_x, exit_y     — edge anchor attrs on <mxGeometry>
+      waypoints                            — list[(x, y)] writing/replacing
+                                              the nested <Array as="points">
+    """
     try:
         doc = parse_drawio_xml(xml_content)
-        
+
         # Find the cell
         for cell in doc.getElementsByTagName('mxCell'):
             if cell.getAttribute('id') == cell_id:
@@ -176,22 +184,65 @@ def update_cell_in_xml(xml_content: str, cell_id: str, **updates) -> str:
                     cell.setAttribute('value', _format_html_value(str(updates['value'])))
                 if 'style' in updates and updates['style'] is not None:
                     cell.setAttribute('style', str(updates['style']))
-                
-                # Update geometry
+
                 geom_elements = cell.getElementsByTagName('mxGeometry')
-                if geom_elements and any(k in updates for k in ['x', 'y', 'width', 'height']):
+                geom_keys = {'x', 'y', 'width', 'height',
+                             'entry_x', 'entry_y', 'exit_x', 'exit_y', 'waypoints'}
+                if geom_elements and any(k in updates for k in geom_keys):
                     geom = geom_elements[0]
-                    if 'x' in updates and updates['x'] is not None:
-                        geom.setAttribute('x', str(updates['x']))
-                    if 'y' in updates and updates['y'] is not None:
-                        geom.setAttribute('y', str(updates['y']))
-                    if 'width' in updates and updates['width'] is not None:
-                        geom.setAttribute('width', str(updates['width']))
-                    if 'height' in updates and updates['height'] is not None:
-                        geom.setAttribute('height', str(updates['height']))
-                
+                    for attr, key in (
+                        ('x', 'x'), ('y', 'y'),
+                        ('width', 'width'), ('height', 'height'),
+                        ('entryX', 'entry_x'), ('entryY', 'entry_y'),
+                        ('exitX', 'exit_x'), ('exitY', 'exit_y'),
+                    ):
+                        if key in updates and updates[key] is not None:
+                            geom.setAttribute(attr, str(updates[key]))
+
+                    # Waypoints — replace the existing Array as="points" with a
+                    # fresh list, or create one if missing.
+                    if 'waypoints' in updates and updates['waypoints'] is not None:
+                        waypoints = updates['waypoints']
+                        # Remove any existing waypoint array.
+                        for arr in list(geom.getElementsByTagName('Array')):
+                            if arr.getAttribute('as') == 'points':
+                                arr.parentNode.removeChild(arr)
+                        if waypoints:
+                            array = doc.createElement('Array')
+                            array.setAttribute('as', 'points')
+                            for wp in waypoints:
+                                if not wp or len(wp) < 2:
+                                    continue
+                                point = doc.createElement('mxPoint')
+                                point.setAttribute('x', str(wp[0]))
+                                point.setAttribute('y', str(wp[1]))
+                                array.appendChild(point)
+                            geom.appendChild(array)
+
+                # Update label offset (nested mxPoint as="offset").
+                if any(k in updates for k in ('label_offset_x', 'label_offset_y')):
+                    if geom_elements:
+                        geom = geom_elements[0]
+                        offset_el = None
+                        for point in geom.getElementsByTagName('mxPoint'):
+                            if point.getAttribute('as') == 'offset':
+                                offset_el = point
+                                break
+                        if offset_el is None:
+                            offset_el = doc.createElement('mxPoint')
+                            offset_el.setAttribute('as', 'offset')
+                            geom.appendChild(offset_el)
+                        if updates.get('label_offset_x') is not None:
+                            offset_el.setAttribute('x', str(updates['label_offset_x']))
+                        elif not offset_el.getAttribute('x'):
+                            offset_el.setAttribute('x', '0')
+                        if updates.get('label_offset_y') is not None:
+                            offset_el.setAttribute('y', str(updates['label_offset_y']))
+                        elif not offset_el.getAttribute('y'):
+                            offset_el.setAttribute('y', '0')
+
                 break
-        
+
         return doc.toxml()
     except Exception as e:
         raise ValueError(f"Failed to update cell: {str(e)}")

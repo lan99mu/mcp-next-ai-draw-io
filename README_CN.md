@@ -49,7 +49,7 @@ pip install -r requirements.txt
 |------|------|
 | 新建图表 | `create_diagram` → `add_shape` → `add_connection` → `save_diagram` |
 | 编辑现有 | `load_diagram` → `list_cells` → `update_cell` / `delete_cell` → `save_diagram` |
-| 布局调整 | `list_cells` → `bind_nodes` → `move_shape` → `detect_line_crossings` |
+| 布局调整 | `list_cells` → `batch_operations`（`bind_nodes` + `move_shape`）→ `auto_layout_adjust` → `detect_line_crossings` |
 
 ## 工具参考
 
@@ -79,14 +79,15 @@ pip install -r requirements.txt
 
 ### 绑定与布局
 
+节点绑定（`bind_nodes` / `unbind_nodes`）已整合进 `batch_operations`。要查询节点的绑定关系，可直接调用 `get_cell`，其返回值包含 `bound_nodes` 字段。处理大量重叠时优先使用 `auto_layout_adjust`。
+
 | 工具 | 描述 |
 |------|------|
-| `bind_nodes` | 绑定节点，使其作为一组移动 |
-| `unbind_nodes` | 从绑定组中移除节点 |
-| `get_bound_nodes` | 查询与某节点绑定的其他节点 |
-| `move_shape` | 移动形状（绑定节点自动跟随）|
-| `suggest_bindings` | 基于距离和命名模式的智能绑定建议 |
-| `detect_line_crossings` | 检测交叉连线并给出修复建议 |
+| `move_shape` | 移动单个形状（绑定节点自动跟随）|
+| `auto_layout_adjust` | 迭代推开重叠形状；绑定组整体移动，不越出容器 |
+| `suggest_bindings` | 智能绑定建议，每条建议附带可直接执行的 `fix` |
+| `detect_line_crossings` | 检测交叉连线，每条都附带结构化 `fix` |
+| `detect_overlaps` | 检测节点重叠 / 越界问题，附带结构化 `fix` |
 
 ### MCP 提示词（渐进式引导）
 

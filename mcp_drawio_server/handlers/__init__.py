@@ -25,8 +25,8 @@ from .cell_handlers import (
 from .binding_handlers import (
     handle_bind_nodes,
     handle_unbind_nodes,
-    handle_get_bound_nodes,
     handle_move_shape,
+    handle_auto_layout_adjust,
 )
 from .analysis_handlers import (
     handle_detect_line_crossings,
@@ -61,15 +61,14 @@ async def handle_tool_call(name: str, arguments: Any) -> list[TextContent]:
     elif name == "add_connection":
         return handle_add_connection(arguments)
 
-    # Binding operations
-    elif name == "bind_nodes":
-        return handle_bind_nodes(arguments)
-    elif name == "unbind_nodes":
-        return handle_unbind_nodes(arguments)
-    elif name == "get_bound_nodes":
-        return handle_get_bound_nodes(arguments)
+    # Binding operations are now batch-only. Their handlers remain imported
+    # above because `batch_operations` still dispatches to them; `get_cell`
+    # returns the bound_nodes field directly so no standalone query tool is
+    # needed.
     elif name == "move_shape":
         return handle_move_shape(arguments)
+    elif name == "auto_layout_adjust":
+        return handle_auto_layout_adjust(arguments)
 
     # Analysis operations
     elif name == "detect_line_crossings":

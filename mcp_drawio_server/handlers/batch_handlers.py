@@ -33,6 +33,7 @@ from .binding_handlers import (
     handle_bind_nodes,
     handle_unbind_nodes,
     handle_move_shape,
+    handle_auto_layout_adjust,
 )
 
 _DEFAULT_SUCCESS_MESSAGE = "ok"
@@ -46,6 +47,7 @@ _OP_HANDLERS: dict[str, Any] = {
     "move_shape": handle_move_shape,
     "update_cell": handle_update_cell,
     "delete_cell": handle_delete_cell,
+    "auto_layout_adjust": handle_auto_layout_adjust,
 }
 
 

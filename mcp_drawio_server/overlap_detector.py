@@ -16,6 +16,13 @@ from __future__ import annotations
 import re
 from typing import Optional
 
+from .render_geometry import (
+    edge_label_rect,
+    parse_style,
+    segment_intersects_rect,
+    shape_render_bounds,
+)
+
 
 _DEFAULT_ROOT_IDS = {"0", "1"}
 
@@ -141,8 +148,14 @@ def detect_overlaps(cells: list[dict]) -> dict:
 
     # Pre-compute absolute bounds for all vertices
     abs_bounds: dict[str, tuple[float, float, float, float]] = {}
+    render_bounds: dict[str, tuple[float, float, float, float]] = {}
     for v in vertices:
-        abs_bounds[v["id"]] = _absolute_bounds(v, cells_by_id)
+        cb = _absolute_bounds(v, cells_by_id)
+        abs_bounds[v["id"]] = cb
+        # render_bounds = cell bounds, expanded when overflow=visible label escapes
+        render_bounds[v["id"]] = shape_render_bounds(
+            cb, v.get("value") or "", v.get("style") or ""
+        )
 
     # Identify container shapes: shapes that have at least one child vertex
     parent_ids_in_use: set[str] = set()
@@ -181,23 +194,51 @@ def detect_overlaps(cells: list[dict]) -> dict:
             if aw <= 0 or ah <= 0 or bw <= 0 or bh <= 0:
                 continue
 
-            if _boxes_overlap(ax, ay, aw, ah, bx, by, bw, bh):
-                # Calculate overlap rectangle
-                ox1 = max(ax, bx)
-                oy1 = max(ay, by)
-                ox2 = min(ax + aw, bx + bw)
-                oy2 = min(ay + ah, by + bh)
+            # First check the cell bounds (the body overlap case).
+            body_overlap = _boxes_overlap(ax, ay, aw, ah, bx, by, bw, bh)
 
-                node_overlaps.append({
-                    "shape1_id": shape1["id"],
-                    "shape1_label": _label(shape1),
-                    "shape1_bounds": [ax, ay, ax + aw, ay + ah],
-                    "shape2_id": shape2["id"],
-                    "shape2_label": _label(shape2),
-                    "shape2_bounds": [bx, by, bx + bw, by + bh],
-                    "overlap_area": [ox1, oy1, ox2, oy2],
-                    "suggestion": _overlap_suggestion(shape1, shape2, ax, ay, aw, ah, bx, by, bw, bh),
-                })
+            # Then also check the render bounds — this catches the case
+            # where overflow=visible labels escape their cell and visually
+            # overlap a neighbouring shape.
+            rax, ray, raw, rah = render_bounds[shape1["id"]]
+            rbx, rby, rbw, rbh = render_bounds[shape2["id"]]
+            render_overlap = _boxes_overlap(rax, ray, raw, rah, rbx, rby, rbw, rbh)
+
+            if not body_overlap and not render_overlap:
+                continue
+
+            cause = "body" if body_overlap else "label_overflow"
+            ux, uy, uw, uh = (
+                (ax, ay, aw, ah) if body_overlap else (rax, ray, raw, rah)
+            )
+            vx, vy, vw, vh = (
+                (bx, by, bw, bh) if body_overlap else (rbx, rby, rbw, rbh)
+            )
+            ox1 = max(ux, vx)
+            oy1 = max(uy, vy)
+            ox2 = min(ux + uw, vx + vw)
+            oy2 = min(uy + uh, vy + vh)
+
+            entry = {
+                "shape1_id": shape1["id"],
+                "shape1_label": _label(shape1),
+                "shape1_bounds": [ax, ay, ax + aw, ay + ah],
+                "shape2_id": shape2["id"],
+                "shape2_label": _label(shape2),
+                "shape2_bounds": [bx, by, bx + bw, by + bh],
+                "overlap_area": [ox1, oy1, ox2, oy2],
+                "cause": cause,
+                "suggestion": _overlap_suggestion(
+                    shape1, shape2, ax, ay, aw, ah, bx, by, bw, bh
+                ),
+                "fix": _build_node_overlap_fix(
+                    shape2, ax, ay, aw, ah, bx, by, bw, bh
+                ),
+            }
+            if cause == "label_overflow":
+                entry["shape1_render_bounds"] = [rax, ray, rax + raw, ray + rah]
+                entry["shape2_render_bounds"] = [rbx, rby, rbx + rbw, rby + rbh]
+            node_overlaps.append(entry)
 
     # -----------------------------------------------------------------------
     # 2.  Out-of-container boundary violations
@@ -230,6 +271,9 @@ def detect_overlaps(cells: list[dict]) -> dict:
                 "container_label": _label(container),
                 "container_bounds": [cx, cy, cx + cw, cy + ch],
                 "suggestion": _containment_suggestion(shape, container, sx, sy, sw, sh, cx, cy, cw, ch),
+                "fix": _build_containment_fix(
+                    shape, container, sx, sy, sw, sh, cx, cy, cw, ch
+                ),
             })
 
     return {
@@ -244,6 +288,8 @@ def detect_overlaps(cells: list[dict]) -> dict:
 # ---------------------------------------------------------------------------
 
 # Match the label-size heuristic used by diagram.Diagram when placing labels.
+# Kept for backwards compatibility; new code should call render_geometry's
+# ``edge_label_rect`` which is font-size aware.
 _LABEL_CHAR_WIDTH = 3.5
 _LABEL_H_PADDING = 6.0
 _LABEL_LINE_HEIGHT = 7.0
@@ -260,7 +306,11 @@ def _strip_html(text: str) -> str:
 
 
 def _estimate_label_half_size(label: str) -> tuple[float, float]:
-    """Estimate (half_width, half_height) of a rendered label box."""
+    """Estimate (half_width, half_height) of a rendered label box.
+
+    Legacy heuristic kept for callers that still expect it.  New code should
+    prefer ``render_geometry.edge_label_rect`` which is font-size aware.
+    """
     plain = _strip_html(label or "").strip()
     if not plain:
         return _LABEL_MIN_HALF_W, _LABEL_MIN_HALF_H
@@ -347,11 +397,11 @@ def _detect_label_overlaps(
     cells: list[dict],
     abs_bounds: dict[str, tuple[float, float, float, float]],
 ) -> list[dict]:
-    """Detect edge-label overlaps against nodes and other edge labels."""
+    """Detect edge-label overlaps against nodes, other edge labels, and edges."""
     shapes_by_id = {c["id"]: c for c in cells if c.get("vertex")}
     edges = [c for c in cells if c.get("edge")]
 
-    # Collect label rects for every labelled edge.
+    # Collect label rects for every labelled edge, using font-aware sizing.
     edge_labels: list[dict] = []
     for edge in edges:
         label = (edge.get("value") or "").strip()
@@ -362,16 +412,35 @@ def _detect_label_overlaps(
             continue
         ox = _safe_float(edge.get("label_offset_x"), 0.0)
         oy = _safe_float(edge.get("label_offset_y"), 0.0)
-        cx = anchor[0] + ox
-        cy = anchor[1] + oy
-        half_w, half_h = _estimate_label_half_size(label)
+        style_dict = parse_style(edge.get("style") or "")
+        has_bg = bool(style_dict.get("labelbackgroundcolor"))
+        rect = edge_label_rect(
+            anchor,
+            label,
+            edge.get("style") or "",
+            label_offset_x=ox,
+            label_offset_y=oy,
+            has_background=has_bg,
+        )
         edge_labels.append({
             "edge_id": edge["id"],
             "label": _label(edge),
-            "rect": (cx - half_w, cy - half_h, 2 * half_w, 2 * half_h),
+            "rect": rect,
             "source": edge.get("source"),
             "target": edge.get("target"),
+            # Remember the existing offset so that any suggested `fix`
+            # emits an **absolute** replacement offset (the new value is the
+            # old offset plus the required delta).
+            "existing_offset": (ox, oy),
         })
+
+    # Pre-compute every edge's polyline segments once for the
+    # label↔edge-path collision pass below.
+    edge_segments: list[tuple[str, str, list[tuple[tuple[float, float], tuple[float, float]]]]] = []
+    for edge in edges:
+        segs = _edge_segments(edge, abs_bounds)
+        if segs:
+            edge_segments.append((edge["id"], _label(edge), segs))
 
     overlaps: list[dict] = []
     seen_pairs: set[tuple[str, str]] = set()
@@ -408,6 +477,7 @@ def _detect_label_overlaps(
                         "Adjust the connection's label_offset_x/label_offset_y to push the "
                         "label clear of the node, or reroute the connection with waypoints."
                     ),
+                    "fix": _build_label_clear_fix(info, lr, [(sx, sy, sw, sh)]),
                 })
 
     # 2. edge label ↔ edge label
@@ -429,9 +499,76 @@ def _detect_label_overlaps(
                         "Set distinct label_offset_x/label_offset_y on one of the "
                         "connections or route the edges along different paths."
                     ),
+                    "fix": _build_label_clear_fix(a, a["rect"], [b["rect"]]),
                 })
 
+    # 3. edge label ↔ another edge's path (text crossing a line is also ugly).
+    for info in edge_labels:
+        lr = info["rect"]
+        for other_id, other_label, segs in edge_segments:
+            if other_id == info["edge_id"]:
+                continue
+            crosses = any(segment_intersects_rect(s1, s2, lr) for s1, s2 in segs)
+            if not crosses:
+                continue
+            pair = ("path", info["edge_id"], other_id)
+            key = (pair[1], pair[2])
+            if key in seen_pairs:
+                continue
+            seen_pairs.add(key)
+            overlaps.append({
+                "issue_type": "edge_label_over_edge_path",
+                "edge_id": info["edge_id"],
+                "edge_label": info["label"],
+                "other_edge_id": other_id,
+                "other_edge_label": other_label,
+                "label_bounds": [lr[0], lr[1], lr[0] + lr[2], lr[1] + lr[3]],
+                "suggestion": (
+                    f"Edge label '{info['label']}' sits on top of the "
+                    f"connection '{other_label}'. Push the label aside via "
+                    "label_offset_x/label_offset_y, or reroute one of the edges."
+                ),
+                "fix": {
+                    "op": "update_cell",
+                    "args": {
+                        "cell_id": info["edge_id"],
+                        # Push the label down by one label-height past its
+                        # current absolute offset.
+                        "label_offset_y": round(
+                            info.get("existing_offset", (0.0, 0.0))[1]
+                            + max(20.0, lr[3]),
+                            2,
+                        ),
+                    },
+                    "rationale": "Push the label vertically off the crossing edge.",
+                },
+            })
+
     return overlaps
+
+
+def _edge_segments(
+    edge: dict,
+    abs_bounds: dict[str, tuple[float, float, float, float]],
+) -> list[tuple[tuple[float, float], tuple[float, float]]]:
+    """Return ordered segments for an edge as a polyline."""
+    start = _edge_endpoint(edge, edge.get("source"), "exit", abs_bounds, "source_point")
+    end = _edge_endpoint(edge, edge.get("target"), "entry", abs_bounds, "target_point")
+    if start is None or end is None:
+        return []
+    points: list[tuple[float, float]] = [start]
+    for wp in edge.get("waypoints") or []:
+        if isinstance(wp, (list, tuple)) and len(wp) >= 2:
+            try:
+                points.append((float(wp[0]), float(wp[1])))
+            except (TypeError, ValueError):
+                continue
+    points.append(end)
+    return [
+        (points[i], points[i + 1])
+        for i in range(len(points) - 1)
+        if points[i] != points[i + 1]
+    ]
 
 
 # ---------------------------------------------------------------------------
@@ -560,3 +697,156 @@ def _containment_suggestion(
         lines.append("  Suggested fixes:")
         lines.extend(fixes)
     return "\n".join(lines)
+
+
+# ---------------------------------------------------------------------------
+# Structured fix builders (Req 2)
+# ---------------------------------------------------------------------------
+
+def _build_node_overlap_fix(
+    shape2: dict,
+    ax: float, ay: float, aw: float, ah: float,
+    bx: float, by: float, bw: float, bh: float,
+    gap: float = 20.0,
+) -> dict:
+    """Compute a minimum-displacement move for ``shape2`` away from shape1.
+
+    Returns a ``{"op": "move_shape", "args": {...}, "rationale": str}``
+    descriptor that an AI / the batch handler can execute verbatim.
+    """
+    overlap_w = max(0.0, min(ax + aw, bx + bw) - max(ax, bx))
+    overlap_h = max(0.0, min(ay + ah, by + bh) - max(ay, by))
+
+    # `shape2` x/y in the *model* may be relative to its parent — read the
+    # stored raw x/y rather than the absolute bx/by, and translate.
+    try:
+        raw_x = float(shape2.get("x") or 0)
+        raw_y = float(shape2.get("y") or 0)
+    except (TypeError, ValueError):
+        raw_x, raw_y = bx, by
+
+    # Prefer the axis with the smaller overlap (minimum displacement).
+    if overlap_w <= overlap_h:
+        if bx >= ax:
+            dx = (ax + aw + gap) - bx
+        else:
+            dx = (ax - bw - gap) - bx
+        new_x = raw_x + dx
+        new_y = raw_y
+        direction = "right" if dx > 0 else "left"
+    else:
+        if by >= ay:
+            dy = (ay + ah + gap) - by
+        else:
+            dy = (ay - bh - gap) - by
+        new_x = raw_x
+        new_y = raw_y + dy
+        direction = "down" if dy > 0 else "up"
+
+    return {
+        "op": "move_shape",
+        "args": {
+            "shape_id": shape2["id"],
+            "new_x": new_x,
+            "new_y": new_y,
+        },
+        "rationale": (
+            f"Move '{shape2.get('id')}' {direction} so it no longer overlaps "
+            f"(minimum separation + {gap:.0f}px gap)."
+        ),
+    }
+
+
+def _build_containment_fix(
+    shape: dict, container: dict,
+    sx: float, sy: float, sw: float, sh: float,
+    cx: float, cy: float, cw: float, ch: float,
+    margin: float = 10.0,
+) -> dict:
+    """Return a ``move_shape`` fix that places the shape inside its container.
+
+    Uses the same relative-coordinate semantics that Draw.io does: children
+    of a container store ``(x, y)`` relative to the container's own origin.
+    """
+    # Clamp absolute position so the cell fits with a margin inside container.
+    tx = min(max(sx, cx + margin), max(cx + margin, cx + cw - sw - margin))
+    ty = min(max(sy, cy + margin), max(cy + margin, cy + ch - sh - margin))
+    # Translate back into "relative-to-container" coordinates (drawio stores
+    # child x/y as relative offsets from the parent origin).
+    new_rel_x = tx - cx
+    new_rel_y = ty - cy
+    return {
+        "op": "move_shape",
+        "args": {
+            "shape_id": shape["id"],
+            "new_x": new_rel_x,
+            "new_y": new_rel_y,
+        },
+        "rationale": (
+            f"Move '{shape.get('id')}' to relative ({new_rel_x:.0f}, "
+            f"{new_rel_y:.0f}) so it fits inside '{container.get('id')}' "
+            f"with a {margin:.0f}px margin."
+        ),
+    }
+
+
+def _build_label_clear_fix(
+    edge_info: dict,
+    label_rect: tuple[float, float, float, float],
+    obstacles: list[tuple[float, float, float, float]],
+    margin: float = 8.0,
+) -> dict:
+    """Return an ``update_cell`` fix that nudges the label clear of obstacles.
+
+    Picks the axis-aligned shift with the smallest magnitude that clears
+    *all* obstacles. Falls back to "push down" when no obstacle exists.
+    """
+    lx, ly, lw, lh = label_rect
+    cx = lx + lw / 2.0
+    cy = ly + lh / 2.0
+
+    candidates: list[tuple[float, float]] = [(0.0, 0.0)]
+    for rx, ry, rw, rh in obstacles:
+        # Up: top of label above top of obstacle
+        candidates.append((0.0, (ry - lh / 2.0 - margin) - cy))
+        # Down
+        candidates.append((0.0, (ry + rh + lh / 2.0 + margin) - cy))
+        # Left
+        candidates.append(((rx - lw / 2.0 - margin) - cx, 0.0))
+        # Right
+        candidates.append(((rx + rw + lw / 2.0 + margin) - cx, 0.0))
+
+    def clears(dx: float, dy: float) -> bool:
+        sx, sy = lx + dx, ly + dy
+        for rx, ry, rw, rh in obstacles:
+            if sx < rx + rw and rx < sx + lw and sy < ry + rh and ry < sy + lh:
+                return False
+        return True
+
+    clearing = [(dx, dy) for dx, dy in candidates if (dx, dy) != (0.0, 0.0) and clears(dx, dy)]
+    if clearing:
+        dx, dy = min(clearing, key=lambda d: d[0] ** 2 + d[1] ** 2)
+    else:
+        # Nothing clears cleanly — push straight down by one label height.
+        dx, dy = 0.0, lh + margin
+
+    # Combine with any existing offset baked into the label's absolute rect.
+    # The label rect already includes the connection's current
+    # ``label_offset_x/y``, so the computed (dx, dy) is a *delta* — we must
+    # add it to the existing offset to yield the new absolute offset.
+    existing_ox, existing_oy = edge_info.get("existing_offset", (0.0, 0.0))
+    new_ox = existing_ox + dx
+    new_oy = existing_oy + dy
+    return {
+        "op": "update_cell",
+        "args": {
+            "cell_id": edge_info["edge_id"],
+            "label_offset_x": round(new_ox, 2),
+            "label_offset_y": round(new_oy, 2),
+        },
+        "rationale": (
+            f"Offset label on edge '{edge_info['edge_id']}' by "
+            f"({dx:.0f}, {dy:.0f}) (new absolute offset "
+            f"({new_ox:.0f}, {new_oy:.0f})) to clear its obstacles."
+        ),
+    }
