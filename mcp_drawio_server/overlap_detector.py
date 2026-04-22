@@ -428,6 +428,10 @@ def _detect_label_overlaps(
             "rect": rect,
             "source": edge.get("source"),
             "target": edge.get("target"),
+            # Remember the existing offset so that any suggested `fix`
+            # emits an **absolute** replacement offset (the new value is the
+            # old offset plus the required delta).
+            "existing_offset": (ox, oy),
         })
 
     # Pre-compute every edge's polyline segments once for the
@@ -528,7 +532,13 @@ def _detect_label_overlaps(
                     "op": "update_cell",
                     "args": {
                         "cell_id": info["edge_id"],
-                        "label_offset_y": max(20.0, lr[3]),
+                        # Push the label down by one label-height past its
+                        # current absolute offset.
+                        "label_offset_y": round(
+                            info.get("existing_offset", (0.0, 0.0))[1]
+                            + max(20.0, lr[3]),
+                            2,
+                        ),
                     },
                     "rationale": "Push the label vertically off the crossing edge.",
                 },
@@ -821,17 +831,22 @@ def _build_label_clear_fix(
         dx, dy = 0.0, lh + margin
 
     # Combine with any existing offset baked into the label's absolute rect.
-    # The label rect already includes the previous offset, so we only emit the
-    # delta as an *absolute* value to replace the old offset.
+    # The label rect already includes the connection's current
+    # ``label_offset_x/y``, so the computed (dx, dy) is a *delta* — we must
+    # add it to the existing offset to yield the new absolute offset.
+    existing_ox, existing_oy = edge_info.get("existing_offset", (0.0, 0.0))
+    new_ox = existing_ox + dx
+    new_oy = existing_oy + dy
     return {
         "op": "update_cell",
         "args": {
             "cell_id": edge_info["edge_id"],
-            "label_offset_x": round(dx, 2),
-            "label_offset_y": round(dy, 2),
+            "label_offset_x": round(new_ox, 2),
+            "label_offset_y": round(new_oy, 2),
         },
         "rationale": (
             f"Offset label on edge '{edge_info['edge_id']}' by "
-            f"({dx:.0f}, {dy:.0f}) to clear its obstacles."
+            f"({dx:.0f}, {dy:.0f}) (new absolute offset "
+            f"({new_ox:.0f}, {new_oy:.0f})) to clear its obstacles."
         ),
     }

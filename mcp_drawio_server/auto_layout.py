@@ -220,12 +220,9 @@ def adjust_layout(
                 shape_b = work.shapes[sid_b]
                 if shape_a.parent_id != shape_b.parent_id:
                     continue
-                # Skip UML-class section children (they share a shape parent
-                # and are managed by UML rendering, not layout).
-                if shape_a.parent_id and shape_a.parent_id in work.shapes:
-                    if (shape_a.parent_id != shape_b.parent_id
-                            or shape_a.width <= 0 or shape_b.width <= 0):
-                        continue
+                # Skip degenerate zero-width cells (e.g. UML section rows).
+                if shape_a.width <= 0 or shape_b.width <= 0:
+                    continue
                 group_a = groups_by_id[sid_a]
                 group_b = groups_by_id[sid_b]
                 if group_a is group_b:

@@ -1109,8 +1109,8 @@ class Diagram:
             # `source=""` / `target=""` would cause drawio to try to resolve
             # those IDs and silently drop the edge binding when it can't.
             endpoint_parts: list[str] = []
-            has_source = bool(conn.source_id) and conn.source_id in self.shapes
-            has_target = bool(conn.target_id) and conn.target_id in self.shapes
+            has_source = conn.source_id and conn.source_id in self.shapes
+            has_target = conn.target_id and conn.target_id in self.shapes
             if has_source:
                 endpoint_parts.append(f'source="{conn.source_id}"')
             if has_target:

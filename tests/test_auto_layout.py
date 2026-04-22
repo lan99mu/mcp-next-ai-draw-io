@@ -71,16 +71,14 @@ def test_adjust_layout_keeps_children_inside_container():
         "C", x=0, y=0, width=400, height=200, shape_type="container"
     )
     # Two siblings inside C that overlap each other.
-    d.add_shape("c1", x=10, y=20, width=100, height=60, parent_id=container)
-    d.add_shape("c2", x=40, y=30, width=100, height=60, parent_id=container)
+    c1 = d.add_shape("c1", x=10, y=20, width=100, height=60, parent_id=container)
+    c2 = d.add_shape("c2", x=40, y=30, width=100, height=60, parent_id=container)
     adjust_layout(d, padding=5, max_iterations=30)
 
     # Both children must still sit strictly inside the container's bounds.
     cx, cy, cw, ch = d._shape_abs_rect(container)
-    for sid in ("c1", "c2"):
-        # look up by label (we don't know generated IDs here since we passed custom ones)
-        shape = next(s for s in d.shapes.values() if s.label == sid)
-        sx, sy, sw, sh = d._shape_abs_rect(shape.id)
+    for child_id in (c1, c2):
+        sx, sy, sw, sh = d._shape_abs_rect(child_id)
         assert sx >= cx - 1
         assert sy >= cy - 1
         assert sx + sw <= cx + cw + 1
